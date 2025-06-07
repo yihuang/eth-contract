@@ -7,6 +7,7 @@ from typing import Any, Mapping, Sequence, cast
 from eth_abi import encode
 from eth_abi.codec import ABICodec
 from eth_abi.registry import registry as default_registry
+from eth_account.signers.base import BaseAccount
 from eth_typing import ABI, ABIConstructor, ABIEvent, ABIFunction
 from eth_utils import (abi_to_signature, filter_abi_by_name,
                        filter_abi_by_type,
@@ -106,14 +107,16 @@ class ContractFunction:
         data = w3.codec.decode(self.output_types, return_data)
         return data[0] if len(data) == 1 else data
 
-    async def transact(self, w3: AsyncWeb3, tx: TxParams | None = None) -> TxReceipt:
+    async def transact(
+        self, w3: AsyncWeb3, acct: BaseAccount | None, tx: TxParams | None = None
+    ) -> TxReceipt:
         """
         Send a transaction to the contract with the given data.
         """
         if tx is None:
             tx = {}
         tx["data"] = self.data
-        return await send_transaction(w3, tx=tx)
+        return await send_transaction(w3, acct, tx=tx)
 
 
 @dataclass
