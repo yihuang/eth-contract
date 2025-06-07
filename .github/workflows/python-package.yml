@@ -29,7 +29,7 @@ jobs:
         use_nix_profile: true
         nix_channel: nixpkgs
     - name: setup
-    - run: |
+      run: |
         cp .envrc.example .envrc
         direnv allow
         uv sync
