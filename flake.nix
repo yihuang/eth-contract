@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/release-24.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/25.05";
     utils.url = "github:numtide/flake-utils";
     foundry.url = "github:shazow/foundry.nix/stable"; # Use stable branch for permanent releases
   };
@@ -26,9 +26,9 @@
           with pkgs;
           mkShell {
             buildInputs = [
-              anvil
               python312Full
               uv
+              foundry-bin
             ];
           };
       }
