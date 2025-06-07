@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-      run: cp .envrc.example .envrc
+    - run: cp .envrc.example .envrc
     - uses: DeterminateSystems/determinate-nix-action@v3
     - name: Install direnv with Nix
       uses: aldoborrero/direnv-nix-action@v2
@@ -22,10 +22,7 @@ jobs:
         use_nix_profile: true
         nix_channel: nixpkgs
     - name: setup
-      run: |
-        cp .envrc.example .envrc
-        direnv allow
-        uv sync
+      run: uv sync
     - name: Run flake8
       uses: suo/flake8-github-action@releases/v1
       if: success() || failure()
