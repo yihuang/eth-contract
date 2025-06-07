@@ -6,8 +6,12 @@ This library provides a similar abstraction to the `Web3().eth.contract()`, but 
 
 It's also possible to cache the parsed ABI information as a global variable, makes it more efficient at runtime.
 
-## Contract
+See the [unit tests]() for examples of how to use it.
 
-```
-```
+Builtin common contract ABIs:
 
+* ERC20
+* Create2 factory
+* Permit2
+
+Please open issue if you want to see more ABIs included.

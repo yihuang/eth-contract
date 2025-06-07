@@ -43,16 +43,27 @@ class ContractConstructor:
 class ContractFunction:
     abis: Sequence[ABIFunction]
 
+    def __post_init__(self) -> None:
+        self._resolve_to(self.abis[0])
+
+    def _resolve_to(self, abi: ABIFunction) -> None:
+        """
+        resolve to one of the overloaded functions, the abi should one of the `self.abis`
+        """
+        self.abi = abi
+        self.input_types = get_abi_input_types(abi)
+        self.output_types = get_abi_output_types(abi)
+        self.signature = abi_to_signature(abi)
+        self.selector = function_signature_to_4byte_selector(self.signature)
+
     @property
     def name(self) -> str:
-        return self.abis[0]["name"]
+        return self.abi["name"]
 
     def __call__(self, *args, **kwargs) -> ContractFunction:
         """
         Call the function with the given arguments,
-        match the overloaded function.
-
-        return the encoded calldata.
+        resolve to one of an overloaded functions.
         """
         if len(self.abis) == 1:
             matched = self.abis
@@ -74,11 +85,7 @@ class ContractFunction:
             )
             raise MismatchedABI(error_diagnosis)
 
-        self.abi = matched[0]
-        self.input_types = get_abi_input_types(self.abi)
-        self.output_types = get_abi_output_types(self.abi)
-        self.signature = abi_to_signature(self.abi)
-        self.selector = function_signature_to_4byte_selector(self.signature)
+        self._resolve_to(matched[0])
         self.arguments = get_normalized_abi_inputs(self.abi, *args, **kwargs)
         self.encoded_args = encode(self.input_types, self.arguments)
         return self
@@ -87,21 +94,18 @@ class ContractFunction:
     def data(self) -> HexBytes:
         return HexBytes(self.selector + self.encoded_args)
 
-    async def call(
-        self,
-        w3: AsyncWeb3,
-        tx: TxParams,
-        **kwargs,
-    ) -> Any:
+    async def call(self, w3: AsyncWeb3, tx: TxParams | None = None, **kwargs) -> Any:
         """
         Call the function on the contract at the given address.
         """
+        if tx is None:
+            tx = {}
         tx["data"] = self.data
         return_data = await w3.eth.call(tx, **kwargs)
         data = w3.codec.decode(self.output_types, return_data)
         return data[0] if len(data) == 1 else data
 
-    async def transact(self, w3: AsyncWeb3, tx: TxParams | None) -> TxReceipt:
+    async def transact(self, w3: AsyncWeb3, tx: TxParams | None = None) -> TxReceipt:
         """
         Send a transaction to the contract with the given data.
         """
@@ -117,7 +121,12 @@ class ContractEvent:
 
     def __post_init__(self):
         self.signature = abi_to_signature(self.abi)
+        self.input_types = get_abi_input_types(self.abi)
         self._topic = None
+
+    @property
+    def name(self) -> str:
+        return self.abi["name"]
 
     @property
     def topic(self) -> HexBytes:
@@ -146,7 +155,7 @@ class ContractFunctions(dict, Mapping[str, Sequence[ABIFunction]]):
 class ContractEvents:
     abis: Sequence[ABIEvent]
 
-    def name(self, name: str) -> ContractEvent:
+    def __getattr__(self, name: str) -> ContractEvent:
         candidates = filter_abi_by_name(name, self.abis)
         if len(candidates) == 0:
             raise ValueError(f"No such event: {name}")
