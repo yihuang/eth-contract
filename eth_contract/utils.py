@@ -12,7 +12,7 @@ from web3._utils.async_transactions import (async_fill_nonce,
 from web3.types import Nonce, TxParams, TxReceipt
 
 
-async def sign_transaction(w3: AsyncWeb3, acct: BaseAccount, **tx: Unpack[TxParams]):
+async def sign_transaction(w3: AsyncWeb3, acct: BaseAccount, tx: TxParams):
     "fill default fields and sign"
     tx = assoc(tx, "from", acct.address)
     tx = await async_fill_nonce(w3, tx)
@@ -28,6 +28,10 @@ async def send_transactions(
     check: bool = True,
     **kwargs: Unpack[TxParams],
 ) -> list[TxReceipt]:
+    """
+    Send a batch of transactions, filling in increasing nonces for the same sender
+    if not provided.
+    """
     nonces: dict[str, int] = {}
 
     async def get_nonce(addr: ChecksumAddress) -> Nonce:
@@ -47,7 +51,7 @@ async def send_transactions(
         if "nonce" not in tx:
             tx["nonce"] = await get_nonce(to_checksum_address(tx["from"]))
         if account is not None:
-            signed = await sign_transaction(w3, account, **tx)
+            signed = await sign_transaction(w3, account, tx)
             txhash = await w3.eth.send_raw_transaction(signed.raw_transaction)
         else:
             txhash = await w3.eth.send_transaction(tx)
@@ -69,4 +73,8 @@ async def send_transaction(
     tx: TxParams | None = None,
     check: bool = True,
 ) -> TxReceipt:
+    """
+    account: if provided, sign transaction locally and call `eth_sendRawTransaction`,
+             otherwise, call `eth_sendTransaction` with the `from` field in the tx.
+    """
     return (await send_transactions(w3, account, [tx or {}], check=check))[0]
