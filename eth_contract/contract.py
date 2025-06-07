@@ -48,7 +48,8 @@ class ContractFunction:
 
     def _resolve_to(self, abi: ABIFunction) -> None:
         """
-        resolve to one of the overloaded functions, the abi should one of the `self.abis`
+        resolve to one of the overloaded functions,
+        the abi should be one of the `self.abis`
         """
         self.abi = abi
         self.input_types = get_abi_input_types(abi)
