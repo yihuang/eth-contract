@@ -137,3 +137,26 @@ def get_bytescode(artifact: dict) -> bytes:
     if isinstance(bytecode, dict):
         bytecode = bytecode["object"]
     return to_bytes(hexstr=bytecode)
+
+
+def get_initcode(artifact: dict, *args, **kwargs) -> bytes:
+    """
+    Build the deploy initcode from a contract artifact and contructor arguments,
+    try to be compatible with multiple formats.
+    Args:
+        artifact (dict): The contract artifact containing initcode information.
+    """
+    from .contract import Contract
+
+    bytecode = get_bytescode(artifact)
+    contract = Contract(artifact["abi"])
+    if contract.constructor is None:
+        if args or kwargs:
+            raise ValueError(
+                "Constructor arguments provided but no constructor "
+                "found in the artifact"
+            )
+        ctor = b""
+    else:
+        ctor = contract.constructor(*args, **kwargs).data
+    return bytecode + ctor

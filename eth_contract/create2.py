@@ -54,8 +54,7 @@ if __name__ == "__main__":
     from web3 import AsyncHTTPProvider, AsyncWeb3
     from web3.types import TxParams
 
-    from .contract import Contract
-    from .utils import get_bytescode, get_default_keystore, load_account
+    from .utils import get_default_keystore, get_initcode, load_account
 
     argparser = argparse.ArgumentParser(
         description="Deploy a contract using create2 factory"
@@ -102,39 +101,29 @@ if __name__ == "__main__":
         help="Path to the keystore file (default: $ETH_KEYSTORE or "
         f'{get_default_keystore()}")',
     )
-    args = argparser.parse_args()
-
-    if args.keystore is None:
-        keystore_path = get_default_keystore()
-    else:
-        keystore_path = Path(args.keystore)
-
-    tx: TxParams = {"value": args.value}
-    account = load_account(args.account, keystore=keystore_path)
-    if account is None:
-        tx["from"] = to_checksum_address(args.account)
-
-    w3 = AsyncWeb3(
-        AsyncHTTPProvider(
-            args.rpc_url or os.getenv("ETH_RPC_URL", "http://localhost:8545")
-        )
-    )
 
     async def main() -> ChecksumAddress:
-        artifact = json.loads(Path(args.artifact).read_text())
-        contract = Contract(artifact["abi"])
-        if contract.constructor is None:
-            if args.ctor_args:
-                raise ValueError(
-                    "Contract does not have a constructor, but arguments were provided"
-                )
-            ctor = b""
+        args = argparser.parse_args()
+
+        if args.keystore is None:
+            keystore_path = get_default_keystore()
         else:
-            ctor = contract.constructor(*args.ctor_args).data
-        bytecode = get_bytescode(artifact)
-        initcode = bytecode + ctor
-        salt = args.salt.to_bytes(32, "big")
+            keystore_path = Path(args.keystore)
+
+        tx: TxParams = {"value": args.value}
+        account = load_account(args.account, keystore=keystore_path)
+        if account is None:
+            tx["from"] = to_checksum_address(args.account)
+
+        w3 = AsyncWeb3(
+            AsyncHTTPProvider(
+                args.rpc_url or os.getenv("ETH_RPC_URL", "http://localhost:8545")
+            )
+        )
+
+        artifact = json.loads(Path(args.artifact).read_text())
+        initcode = get_initcode(artifact, *args.ctor_args)
         factory = to_checksum_address(args.factory)
-        return await create2_deploy(w3, initcode, account, salt, factory, extra=tx)
+        return await create2_deploy(w3, initcode, account, args.salt, factory, extra=tx)
 
     print(asyncio.run(main()))
