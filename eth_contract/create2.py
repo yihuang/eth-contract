@@ -16,7 +16,7 @@ def create2_address(
     return to_checksum_address(keccak(data)[12:])
 
 
-def create2_tx(initcode, salt: bytes, factory=CREATE2_FACTORY) -> TxParams:
+def create2_tx(initcode: bytes, salt: bytes, factory=CREATE2_FACTORY) -> TxParams:
     """
     deploy a contract using create2 factory
     """
