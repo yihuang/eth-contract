@@ -1,9 +1,15 @@
+import json
+import os
+import platform
+from getpass import getpass
+from pathlib import Path
 from typing import cast
 
+from eth_account import Account
 from eth_account.signers.base import BaseAccount
 from eth_account.types import TransactionDictType
 from eth_typing import ChecksumAddress
-from eth_utils import to_checksum_address, to_normalized_address
+from eth_utils import to_bytes, to_checksum_address, to_normalized_address
 from eth_utils.toolz import assoc
 from typing_extensions import Unpack
 from web3 import AsyncWeb3
@@ -78,3 +84,56 @@ async def send_transaction(
              otherwise, call `eth_sendTransaction` with the `from` field in the tx.
     """
     return (await send_transactions(w3, account, [tx or {}], check=check))[0]
+
+
+def get_default_keystore() -> Path:
+    """
+    Get the default keystore path based on the platform.
+    Returns the path to the keystore directory.
+    If the `ETH_KEYSTORE` environment variable is set, it will use that path instead.
+    """
+    keystore = os.getenv("ETH_KEYSTORE")
+    if keystore:
+        return Path(keystore)
+
+    system = platform.system()
+    if system == "Darwin":  # macOS
+        return Path.home() / "Library" / "Ethereum" / "keystore"
+    elif system == "Windows":
+        return Path.home() / "AppData" / "Roaming" / "Ethereum" / "keystore"
+    else:
+        return Path.home() / ".ethereum" / "keystore"  # default to linux
+
+
+def load_account(
+    address: str, password: str | None = None, keystore: Path | None = None
+) -> BaseAccount | None:
+    """
+    Load an account from the keystore by address and password.
+    If keystore is not provided, it will use the default keystore path on the platform.
+    Returns the account if found, otherwise None.
+    """
+    if keystore is None:
+        keystore = get_default_keystore()
+    keyfile_json = None
+    for f in keystore.iterdir():
+        keyfile_json = json.loads(f.read_text())
+        if to_checksum_address(address) == to_checksum_address(keyfile_json["address"]):
+            if password is None:
+                password = getpass("Enter your keystore password: ")
+            return Account.from_key(Account.decrypt(keyfile_json, password))
+    return None
+
+
+def get_bytescode(artifact: dict) -> bytes:
+    """
+    Extracts the bytecode from a contract artifact,
+    try to be compatible with multiple formats.
+    Args:
+        artifact (dict): The contract artifact containing bytecode information.
+    """
+    bytecode = artifact.get("bytecode") or artifact.get("byte")
+    assert bytecode is not None, "Bytecode not found in artifact"
+    if isinstance(bytecode, dict):
+        bytecode = bytecode["object"]
+    return to_bytes(hexstr=bytecode)

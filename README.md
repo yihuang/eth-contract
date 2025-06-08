@@ -7,6 +7,8 @@ See the [unit tests](https://github.com/yihuang/eth-contract/blob/main/eth_contr
 Builtin common contract ABIs:
 
 * ERC20
+* CREATE2 factory (0x4e59b44847b379578588920ca78fbf26c0b4956c)
+  include cli utility to deploy contract using the factory, `python -m eth_contract.create2 --help`.
 
 Please open issue if you want to see more ABIs included.
 

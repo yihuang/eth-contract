@@ -29,15 +29,16 @@ from .utils import send_transaction
 class ContractConstructor:
     abi: ABIConstructor
 
-    def __call__(self, *args) -> bytes:
+    def __post_init__(self) -> None:
+        self.input_types = get_abi_input_types(self.abi)
+
+    def __call__(self, *args, **kwargs) -> ContractConstructor:
         """
         Call the constructor with the given arguments.
         """
-        if len(args) != len(self.abi["inputs"]):
-            raise ValueError(
-                f"Expected {len(self.abi['inputs'])} arguments, got {len(args)}"
-            )
-        return encode(get_abi_input_types(self.abi), args)
+        self.arguments = get_normalized_abi_inputs(self.abi, *args, **kwargs)
+        self.data = encode(self.input_types, self.arguments)
+        return self
 
 
 @dataclass
@@ -185,3 +186,8 @@ class Contract:
         self.fns = ContractFunctions(fns)
 
         self.events = ContractEvents(filter_abi_by_type("event", self.abi))
+
+        self.constructor: ContractConstructor | None = None
+        ctor = filter_abi_by_type("constructor", self.abi)
+        if ctor:
+            self.constructor = ContractConstructor(ctor[0])
