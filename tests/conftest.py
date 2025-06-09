@@ -1,6 +1,6 @@
+import socket
 import subprocess
 import time
-import socket
 from typing import Generator
 
 import pytest
@@ -30,7 +30,7 @@ def w3() -> Generator[AsyncWeb3, None, None]:
         [
             "anvil",
             "--fork-url",
-            "https://mainnet.infura.io/v3/YOUR_INFURA_KEY",
+            "https://eth-mainnet.public.blastapi.io",
             "--fork-block-number",
             "18000000",
             "--port",

@@ -1,4 +1,4 @@
-use nix -p python312Full uv
+use nix -p python312Full uv foundry
 export VIRTUAL_ENV=."venv"
 layout python3
 export TMPDIR=/tmp
