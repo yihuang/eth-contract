@@ -1,7 +1,8 @@
 import pytest
+from eth_contract.create2 import CREATE2_FACTORY, create2_deploy
 from eth_contract.erc20 import ERC20, ERC20_ABI
-from eth_contract.create2 import create2_deploy, CREATE2_FACTORY
 from eth_contract.utils import get_initcode
+
 
 @pytest.mark.asyncio
 async def test_erc20_live(w3):
