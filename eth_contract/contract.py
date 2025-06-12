@@ -195,3 +195,32 @@ class Contract:
         ctor = filter_abi_by_type("constructor", self.abi)
         if ctor:
             self.constructor = ContractConstructor(ctor[0])
+
+
+if __name__ == "__main__":
+    # cli to list all abi signatures in the contract abi
+    import json
+    import sys
+    from pathlib import Path
+
+    if len(sys.argv) != 2:
+        print("Usage: python contract.py <path_to_abi.json>")
+        sys.exit(1)
+
+    abi_path = Path(sys.argv[1])
+    if not abi_path.exists():
+        print(f"ABI file not found: {abi_path}")
+        sys.exit(1)
+
+    abi = json.loads(abi_path.read_text())
+    if isinstance(abi, dict):
+        abi = abi["abi"]
+
+    contract = Contract(abi)
+    for fn_name, fns in contract.fns.items():
+        for fn in fns:
+            print(f"function\t{abi_to_signature(fn)}")
+    for event in contract.events.abis:
+        print(f"event\t{abi_to_signature(event)}")
+    if contract.constructor:
+        print(f"constructor\t{abi_to_signature(contract.constructor.abi)}")
