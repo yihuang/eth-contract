@@ -69,6 +69,7 @@ if __name__ == "__main__":
     argparser.add_argument("ctor_args", nargs="*", help="Constructor arguments")
     argparser.add_argument(
         "--salt",
+        type=int,
         default=0,
         help="Salt (integer) for the create2 deployment (default: 0)",
     )

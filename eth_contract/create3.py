@@ -74,7 +74,7 @@ if __name__ == "__main__":
                         parse_cli_arg)
 
     argparser = argparse.ArgumentParser(
-        description="Deploy a contract using create2 factory"
+        description="Deploy a contract using create3 factory"
     )
 
     argparser.add_argument(
@@ -85,13 +85,14 @@ if __name__ == "__main__":
     argparser.add_argument("ctor_args", nargs="*", help="Constructor arguments")
     argparser.add_argument(
         "--salt",
+        type=int,
         default=0,
-        help="Salt (integer) for the create2 deployment (default: 0)",
+        help="Salt (integer) for the create3 deployment (default: 0)",
     )
     argparser.add_argument(
         "--factory",
         default=CREATEX_FACTORY,
-        help=f"Factory address for create2 deployment (default: {CREATEX_FACTORY})",
+        help=f"Factory address for create3 deployment (default: {CREATEX_FACTORY})",
     )
     argparser.add_argument(
         "--value",
