@@ -105,7 +105,11 @@ class ContractFunction:
             tx = {}
         tx["data"] = self.data
         return_data = await w3.eth.call(tx, **kwargs)
-        data = w3.codec.decode(self.output_types, return_data)
+        return self.decode(return_data, codec=w3.codec)
+
+    def decode(self, data: bytes, codec=None) -> Any:
+        codec = codec or ABICodec(default_registry)
+        data = codec.decode(self.output_types, data)
         return data[0] if len(data) == 1 else data
 
     async def transact(
