@@ -1,50 +1,66 @@
+import json
+from pathlib import Path
+
 from eth_account.signers.base import BaseAccount
 from eth_typing import ChecksumAddress
 from eth_utils import keccak, to_bytes, to_checksum_address
 from web3 import AsyncWeb3
 from web3.types import TxParams
 
-from .utils import send_transaction
+from .contract import Contract
 
-CREATE2_FACTORY = to_checksum_address("0x4e59b44847b379578588920ca78fbf26c0b4956c")
+CREATEX_FACTORY = to_checksum_address("0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed")
+CREATE3_PROXY_HASH = to_bytes(
+    hexstr="0x21c35dbe1b344a2488cf3321d6ce542f8e9f305544ff09e4993a62319a497c1f"
+)
+
+CREATEX_ABI = json.loads(
+    Path(__file__).parent.joinpath("abis/createx.json").read_text()
+)
+CREATEX = Contract(CREATEX_ABI)
 
 
-def create2_address(
-    initcode: bytes, salt: bytes, factory=CREATE2_FACTORY
+def create3_address(
+    salt: bytes, factory: ChecksumAddress = CREATEX_FACTORY
 ) -> ChecksumAddress:
-    data = b"\xff" + to_bytes(hexstr=factory) + salt + keccak(initcode)
-    return to_checksum_address(keccak(data)[12:])
-
-
-def create2_tx(initcode: bytes, salt: bytes, factory=CREATE2_FACTORY) -> TxParams:
     """
-    deploy a contract using create2 factory
+    Calculate the deterministic CREATE3 address.
+
+    Args:
+        factory: The CreateX contract address (0xba5...)
+        salt: Bytes32 salt value
     """
-    assert len(salt) == 32, "Salt must be 32 bytes"
-    return {"to": factory, "data": salt + initcode}
+    # Create3 address calculation formula:
+    # proxy_code = 67363d3d37363d34f03d5260086018f3
+    # proxy_code_hash = 21c35dbe1b344a2488cf3321d6ce542f8e9f305544ff09e4993a62319a497c1f
+    # keccak256(0xff ++ sender ++ keccak(salt) ++ proxy_code_hash)[12:]
+    data = b"\xff" + to_bytes(hexstr=factory) + keccak(salt) + CREATE3_PROXY_HASH
+    return to_checksum_address(keccak(b"\xd6\x94" + keccak(data)[12:] + b"\x01")[12:])
 
 
-async def create2_deploy(
+async def create3_deploy(
     w3: AsyncWeb3,
     initcode: bytes,
     acct: BaseAccount | None = None,
     salt: bytes | int = 0,
-    factory=CREATE2_FACTORY,
+    factory: ChecksumAddress = CREATEX_FACTORY,
     extra: TxParams | None = None,  # extra tx parameters
 ) -> ChecksumAddress:
-    """
-    Deploy a contract using create2 factory.
-    """
     if isinstance(salt, int):
         salt = salt.to_bytes(32, "big")
-    tx = create2_tx(initcode, salt, factory)
-    tx.update(extra or {})
-    await send_transaction(w3, acct, tx)
-    return create2_address(initcode, salt, factory)
+
+    if extra is None:
+        extra = {}
+
+    await CREATEX.fns.deployCreate3(salt, initcode).transact(
+        w3, acct, tx={"to": factory, **extra}
+    )
+
+    return create3_address(salt, factory=factory)
 
 
 if __name__ == "__main__":
-    # simple cli to deploy a contract artifact using create2 factory
+    # simple cli to deploy a contract artifact using createx factory
     import argparse
     import asyncio
     import json
@@ -73,8 +89,8 @@ if __name__ == "__main__":
     )
     argparser.add_argument(
         "--factory",
-        default=CREATE2_FACTORY,
-        help=f"Factory address for create2 deployment (default: {CREATE2_FACTORY})",
+        default=CREATEX_FACTORY,
+        help=f"Factory address for create2 deployment (default: {CREATEX_FACTORY})",
     )
     argparser.add_argument(
         "--value",
@@ -115,19 +131,19 @@ if __name__ == "__main__":
         account = args.account or os.environ["ETH_FROM"]
         acct = load_account(account, keystore=keystore_path)
         if acct is None:
-            tx["from"] = to_checksum_address(account)
+            tx["from"] = to_checksum_address(args.account)
 
         w3 = AsyncWeb3(AsyncHTTPProvider(args.rpc_url))
         artifact = json.loads(Path(args.artifact).read_text())
         initcode = get_initcode(artifact, *args.ctor_args)
         factory = to_checksum_address(args.factory)
-        addr = create2_address(initcode, args.salt.to_bytes(32, "big"), factory)
+        addr = create3_address(args.salt.to_bytes(32, "big"), factory)
         if await w3.eth.get_code(addr):
             print(f"Contract address already exists {addr}")
             return addr
         else:
             print(f"Deploying contract to {addr}")
-            return await create2_deploy(
+            return await create3_deploy(
                 w3, initcode, acct, args.salt, factory, extra=tx
             )
 
