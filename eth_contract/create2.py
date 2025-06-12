@@ -84,15 +84,16 @@ if __name__ == "__main__":
     argparser.add_argument(
         "--rpc-url",
         type=str,
-        default=None,
+        default=os.getenv("ETH_RPC_URL", "http://localhost:8545"),
         help="RPC URL to connect to the Ethereum node "
         "(default: $ETH_RPC_URL or http://localhost:8545)",
     )
     argparser.add_argument(
         "--account",
         type=str,
-        required=True,
-        help="Account address to use for deployment, should be available from keystore",
+        required=False,
+        help="Account address to use for deployment, should be available from keystore, "
+        "default is $ETH_FROM",
     )
     argparser.add_argument(
         "--keystore",
@@ -111,19 +112,23 @@ if __name__ == "__main__":
             keystore_path = Path(args.keystore)
 
         tx: TxParams = {"value": args.value}
-        account = load_account(args.account, keystore=keystore_path)
-        if account is None:
+        account = args.account or os.environ["ETH_FROM"]
+        acct = load_account(args.account, keystore=keystore_path)
+        if acct is None:
             tx["from"] = to_checksum_address(args.account)
 
-        w3 = AsyncWeb3(
-            AsyncHTTPProvider(
-                args.rpc_url or os.getenv("ETH_RPC_URL", "http://localhost:8545")
-            )
-        )
-
+        w3 = AsyncWeb3(AsyncHTTPProvider(args.rpc_url))
         artifact = json.loads(Path(args.artifact).read_text())
         initcode = get_initcode(artifact, *args.ctor_args)
         factory = to_checksum_address(args.factory)
-        return await create2_deploy(w3, initcode, account, args.salt, factory, extra=tx)
+        addr = create2_address(initcode, args.salt.to_bytes(32, "big"), factory)
+        if await w3.eth.get_code(addr):
+            print(f"Contract address already exists {addr}")
+            return addr
+        else:
+            print(f"Deploying contract to {addr}")
+            return await create2_deploy(
+                w3, initcode, acct, args.salt, factory, extra=tx
+            )
 
-    print(asyncio.run(main()))
+    asyncio.run(main())
