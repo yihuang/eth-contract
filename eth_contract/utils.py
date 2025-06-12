@@ -160,3 +160,16 @@ def get_initcode(artifact: dict, *args, **kwargs) -> bytes:
     else:
         ctor = contract.constructor(*args, **kwargs).data
     return bytecode + ctor
+
+
+def parse_cli_arg(arg: str) -> str | bytes | int:
+    """
+    Parse a command line argument, converting it to the specified type.
+    If the argument is not provided, return the default value.
+    """
+    if arg.startswith("0x"):
+        return to_bytes(hexstr=arg)
+    try:
+        return int(arg)
+    except ValueError:
+        return arg
