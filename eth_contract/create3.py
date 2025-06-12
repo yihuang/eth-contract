@@ -81,7 +81,7 @@ if __name__ == "__main__":
         type=str,
         help="Path to the contract artifact file (JSON format)",
     )
-    argparser.add_argument("ctor_args", nargs="+", help="Constructor arguments")
+    argparser.add_argument("ctor_args", nargs="*", help="Constructor arguments")
     argparser.add_argument(
         "--salt",
         default=0,
