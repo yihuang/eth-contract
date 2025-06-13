@@ -19,7 +19,8 @@ def wait_port(port: int, host: str = "localhost", timeout: float = 10.0) -> None
         except (socket.timeout, ConnectionRefusedError):
             if time.perf_counter() - start_time >= timeout:
                 raise TimeoutError(
-                    f"Timed out waiting for port {port} on {host} after {timeout} seconds"
+                    f"Timed out waiting for port {port} on {host} after "
+                    f"{timeout} seconds"
                 )
             time.sleep(0.1)
 
