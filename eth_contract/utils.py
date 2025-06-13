@@ -15,7 +15,9 @@ from typing_extensions import Unpack
 from web3 import AsyncWeb3
 from web3._utils.async_transactions import (async_fill_nonce,
                                             async_fill_transaction_defaults)
-from web3.types import Nonce, TxParams, TxReceipt
+from web3.types import Nonce, TxParams, TxReceipt, Wei
+
+ZERO_ADDRESS = to_checksum_address("0x0000000000000000000000000000000000000000")
 
 
 async def sign_transaction(w3: AsyncWeb3, acct: BaseAccount, tx: TxParams):
@@ -173,3 +175,79 @@ def parse_cli_arg(arg: str) -> str | bytes | int:
         return int(arg)
     except ValueError:
         return arg
+
+
+async def transfer(
+    w3: AsyncWeb3,
+    token: ChecksumAddress,
+    from_: BaseAccount | ChecksumAddress,
+    to: ChecksumAddress,
+    amount: Wei,
+):
+    from .erc20 import ERC20
+
+    if token == ZERO_ADDRESS:
+        # transfer native currency
+        tx = TxParams(
+            {
+                "to": to,
+                "value": amount,
+            }
+        )
+    else:
+        # transfer ERC20 token
+        tx = TxParams(
+            {
+                "to": token,
+                "data": ERC20.fns.transfer(to, amount).data,
+            }
+        )
+    if isinstance(from_, BaseAccount):
+        await send_transaction(w3, account=from_, tx=tx)
+    else:
+        tx = assoc(tx, "from", from_)
+        await send_transaction(w3, tx=tx)
+
+
+async def balance_of(
+    w3: AsyncWeb3, token: ChecksumAddress, address: ChecksumAddress
+) -> int:
+    "get balance of address for token"
+    from .erc20 import ERC20
+
+    if token == ZERO_ADDRESS:
+        return await w3.eth.get_balance(address)
+
+    return await ERC20.fns.balanceOf(address).call(w3, {"to": token})
+
+
+async def deploy_presigned_tx(
+    w3: AsyncWeb3,
+    tx: bytes,
+    deployer: ChecksumAddress,
+    contract: ChecksumAddress,
+    funder: BaseAccount | None = None,
+    fee: Wei = Wei(10**17),  # default to 0.1eth
+):
+    """
+    deploy well known contracts with a presigned transaction.
+
+    funder: default to the first account in the node,
+    fee: default to 0.1 ETH.
+    """
+    if await w3.eth.get_code(contract):
+        # already deployed
+        return
+
+    if await w3.eth.get_balance(deployer) < fee:
+        # fund the deployer if needed
+        await transfer(
+            w3, ZERO_ADDRESS, funder or (await w3.eth.accounts)[0], deployer, fee
+        )
+
+    receipt = await w3.eth.wait_for_transaction_receipt(
+        await w3.eth.send_raw_transaction(tx)
+    )
+
+    assert receipt["status"] == 1, "deployment failed"
+    assert receipt["contractAddress"] == contract
