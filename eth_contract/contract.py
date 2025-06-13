@@ -183,6 +183,9 @@ class ContractEvents:
 class Contract:
     abi: ABI
 
+    receive: ContractFunction | None = None
+    fallback: ContractFunction | None = None
+
     def __post_init__(self) -> None:
         fns: defaultdict[str, list[ABIFunction]] = defaultdict(list)
         for fn in filter_abi_by_type("function", self.abi):
@@ -195,6 +198,12 @@ class Contract:
         ctor = filter_abi_by_type("constructor", self.abi)
         if ctor:
             self.constructor = ContractConstructor(ctor[0])
+
+        if filter_abi_by_type("receive", self.abi):
+            self.receive = ContractFunction([{"type": "function", "name": "receive"}])
+
+        if filter_abi_by_type("fallback", self.abi):
+            self.fallback = ContractFunction([{"type": "function", "name": "fallback"}])
 
 
 if __name__ == "__main__":
@@ -217,10 +226,12 @@ if __name__ == "__main__":
         abi = abi["abi"]
 
     contract = Contract(abi)
+    if contract.constructor:
+        print(f"constructor\t{abi_to_signature(contract.constructor.abi)}")
     for fn_name, fns in contract.fns.items():
         for fn in fns:
             print(f"function\t{abi_to_signature(fn)}")
     for event in contract.events.abis:
         print(f"event\t{abi_to_signature(event)}")
-    if contract.constructor:
-        print(f"constructor\t{abi_to_signature(contract.constructor.abi)}")
+    for abi in filter_abi_by_type("error", contract.abi):
+        print(f"error\t{abi_to_signature(abi)}")
