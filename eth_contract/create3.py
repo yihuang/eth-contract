@@ -110,7 +110,8 @@ if __name__ == "__main__":
         "--account",
         type=str,
         required=False,
-        help="Account address to use for deployment, should be available from keystore, "
+        help="Account address to use for deployment, "
+        "should be available from keystore, "
         "default is $ETH_FROM",
     )
     argparser.add_argument(

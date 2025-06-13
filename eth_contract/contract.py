@@ -103,7 +103,7 @@ class ContractFunction:
         """
         if tx is None:
             tx = {}
-        tx["data"] = self.data
+        tx = {**tx, "data": self.data}
         return_data = await w3.eth.call(tx, **kwargs)
         return self.decode(return_data, codec=w3.codec)
 
@@ -113,14 +113,14 @@ class ContractFunction:
         return data[0] if len(data) == 1 else data
 
     async def transact(
-        self, w3: AsyncWeb3, acct: BaseAccount | None, tx: TxParams | None = None
+        self, w3: AsyncWeb3, acct: BaseAccount | None = None, tx: TxParams | None = None
     ) -> TxReceipt:
         """
         Send a transaction to the contract with the given data.
         """
         if tx is None:
             tx = {}
-        tx["data"] = self.data
+        tx = {**tx, "data": self.data}
         return await send_transaction(w3, acct, tx=tx)
 
 
