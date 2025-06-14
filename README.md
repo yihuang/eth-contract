@@ -12,6 +12,7 @@ Builtin common contract ABIs:
 * createx factory (https://github.com/pcaversaccio/createx)
   include cli utility to deploy contract with create3, `python -m eth_contract.create3 --help`.
 * multicall3 (https://github.com/mds1/multicall3)
+* weth (https://github.com/gnosis/canonical-weth)
 
 Please open issue if you want to see more ABIs included.
 
