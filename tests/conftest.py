@@ -53,10 +53,10 @@ async def w3() -> AsyncGenerator[AsyncWeb3, None]:
     proc = await asyncio.create_subprocess_exec(
         "anvil",
         "-q",
-        "--fork-url",
-        "https://eth-mainnet.public.blastapi.io",
-        "--fork-block-number",
-        "18000000",
+        # "--fork-url",
+        # "https://eth-mainnet.public.blastapi.io",
+        # "--fork-block-number",
+        # "18000000",
         "--port",
         str(PORT),
     )
