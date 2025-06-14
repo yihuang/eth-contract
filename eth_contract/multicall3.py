@@ -1,28 +1,28 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NamedTuple
 
 from eth_typing import ChecksumAddress
 from eth_utils import to_checksum_address
 from web3 import AsyncWeb3
+from web3.types import Wei
 
 from .contract import Contract, ContractFunction
 
 
 class Call3(NamedTuple):
     target: ChecksumAddress
-    allow_failure: bool
-    data: bytes
+    allow_failure: bool = False
+    data: bytes = b""
 
 
 class Call3Value(NamedTuple):
     target: ChecksumAddress
-    allow_failure: bool
-    value: int
-    data: bytes
+    allow_failure: bool = False
+    value: int = Wei(0)
+    data: bytes = b""
 
 
 MULTICALL3_ADDRESS = to_checksum_address("0xcA11bde05977b3631167028862bE2a173976CA11")
