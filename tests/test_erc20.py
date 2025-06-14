@@ -13,12 +13,12 @@ MockERC20_ARTIFACT = json.loads(
 
 
 @pytest.mark.asyncio
-async def test_erc20_live(w3):
+async def test_erc20_live(fork_w3):
     # Test with live forked mainnet
     addr = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"  # USDC
     balance = await ERC20.fns.balanceOf(
         "0x0000000000000000000000000000000000000000"
-    ).call(w3, {"to": addr})
+    ).call(fork_w3, {"to": addr})
     assert isinstance(balance, int)
 
 

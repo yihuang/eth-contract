@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -10,8 +11,6 @@ from eth_utils import to_checksum_address
 from web3 import AsyncHTTPProvider, AsyncWeb3
 from web3.types import Wei
 
-PORT = 9545
-
 
 async def await_port(port: int, retries: int = 100, host="127.0.0.1") -> None:
     """Check if a port is open and available for connection."""
@@ -20,7 +19,7 @@ async def await_port(port: int, retries: int = 100, host="127.0.0.1") -> None:
             reader, writer = await asyncio.open_connection(host, port)
             writer.close()
             await writer.wait_closed()
-            return True
+            return
         except (ConnectionRefusedError, asyncio.TimeoutError):
             await asyncio.sleep(0.1)
     raise asyncio.TimeoutError(
@@ -48,25 +47,39 @@ async def ensure_createx_deployed(w3: AsyncWeb3):
     )
 
 
-@pytest_asyncio.fixture(scope="session")
-async def w3() -> AsyncGenerator[AsyncWeb3, None]:
+@asynccontextmanager
+async def anvil_w3(port: int, *args) -> AsyncGenerator[AsyncWeb3, None]:
     proc = await asyncio.create_subprocess_exec(
-        "anvil",
-        "-q",
-        # "--fork-url",
-        # "https://eth-mainnet.public.blastapi.io",
-        # "--fork-block-number",
-        # "18000000",
-        "--port",
-        str(PORT),
+        "anvil", *(args + ("--port", str(port)))
     )
 
     try:
-        await await_port(PORT)
-        w3 = AsyncWeb3(AsyncHTTPProvider(f"http://localhost:{PORT}"))
+        await await_port(port)
+        w3 = AsyncWeb3(AsyncHTTPProvider(f"http://localhost:{port}"))
         await ensure_multicall3_deployed(w3)
         await ensure_createx_deployed(w3)
         yield w3
     finally:
         proc.terminate()
         await proc.wait()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def w3() -> AsyncGenerator[AsyncWeb3, None]:
+    async with anvil_w3(9545, "-q", "--chain-id", "1337") as w3:
+        yield w3
+
+
+@pytest_asyncio.fixture(scope="session")
+async def fork_w3() -> AsyncGenerator[AsyncWeb3, None]:
+    async with anvil_w3(
+        10545,
+        "-q",
+        "--fork-url",
+        "https://eth-mainnet.public.blastapi.io",
+        "--fork-block-number",
+        "18000000",
+        "--chain-id",
+        "1337",
+    ) as w3:
+        yield w3
