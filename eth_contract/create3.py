@@ -21,7 +21,7 @@ CREATEX = Contract(CREATEX_ABI)
 
 
 def create3_address(
-    salt: bytes, factory: ChecksumAddress = CREATEX_FACTORY
+    salt: bytes | int = 0, factory: ChecksumAddress = CREATEX_FACTORY
 ) -> ChecksumAddress:
     """
     Calculate the deterministic CREATE3 address.
@@ -30,6 +30,8 @@ def create3_address(
         factory: The CreateX contract address (0xba5...)
         salt: Bytes32 salt value
     """
+    if isinstance(salt, int):
+        salt = salt.to_bytes(32, "big")
     # Create3 address calculation formula:
     # proxy_code = 67363d3d37363d34f03d5260086018f3
     # proxy_code_hash = 21c35dbe1b344a2488cf3321d6ce542f8e9f305544ff09e4993a62319a497c1f

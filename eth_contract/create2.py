@@ -10,8 +10,10 @@ CREATE2_FACTORY = to_checksum_address("0x4e59b44847b379578588920ca78fbf26c0b4956
 
 
 def create2_address(
-    initcode: bytes, salt: bytes, factory=CREATE2_FACTORY
+    initcode: bytes, salt: bytes | int = 0, factory=CREATE2_FACTORY
 ) -> ChecksumAddress:
+    if isinstance(salt, int):
+        salt = salt.to_bytes(32, "big")
     data = b"\xff" + to_bytes(hexstr=factory) + salt + keccak(initcode)
     return to_checksum_address(keccak(data)[12:])
 
