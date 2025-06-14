@@ -11,6 +11,8 @@ from eth_utils import to_checksum_address
 from web3 import AsyncHTTPProvider, AsyncWeb3
 from web3.types import Wei
 
+from .contracts import deploy_weth
+
 
 async def await_port(port: int, retries: int = 100, host="127.0.0.1") -> None:
     """Check if a port is open and available for connection."""
@@ -58,6 +60,7 @@ async def anvil_w3(port: int, *args) -> AsyncGenerator[AsyncWeb3, None]:
         w3 = AsyncWeb3(AsyncHTTPProvider(f"http://localhost:{port}"))
         await ensure_multicall3_deployed(w3)
         await ensure_createx_deployed(w3)
+        await deploy_weth(w3)
         yield w3
     finally:
         proc.terminate()

@@ -1,15 +1,11 @@
-import json
-from pathlib import Path
-
 import pytest
 from eth_contract.create2 import create2_address, create2_deploy
 from eth_contract.create3 import create3_address, create3_deploy
 from eth_contract.erc20 import ERC20
-from eth_contract.utils import get_initcode
+from eth_contract.utils import ZERO_ADDRESS, balance_of, get_initcode
+from eth_contract.weth import WETH
 
-MockERC20_ARTIFACT = json.loads(
-    Path(__file__).parent.joinpath("contracts/MockERC20.json").read_text()
-)
+from .contracts import WETH_ADDRESS, MockERC20_ARTIFACT
 
 
 @pytest.mark.asyncio
@@ -54,3 +50,20 @@ async def test_create3_deploy(w3):
     assert await ERC20.fns.balanceOf(owner).call(w3, tx=tx) == 0
     await ERC20.fns.mint(owner, 1000).transact(w3, tx=tx)
     assert await ERC20.fns.balanceOf(owner).call(w3, tx=tx) == 1000
+
+
+@pytest.mark.asyncio
+async def test_weth(w3):
+    acct = (await w3.eth.accounts)[0]
+    before = await balance_of(w3, ZERO_ADDRESS, acct)
+    receipt = await WETH.fns.deposit().transact(
+        w3, tx={"from": acct, "to": WETH_ADDRESS, "value": 1000}
+    )
+    fee = receipt["effectiveGasPrice"] * receipt["gasUsed"]
+    await balance_of(w3, WETH_ADDRESS, acct) == 1000
+    receipt = await WETH.fns.withdraw(1000).transact(
+        w3, tx={"from": acct, "to": WETH_ADDRESS}
+    )
+    fee += receipt["effectiveGasPrice"] * receipt["gasUsed"]
+    await balance_of(w3, WETH_ADDRESS, acct) == 0
+    assert await balance_of(w3, ZERO_ADDRESS, acct) == before - fee
