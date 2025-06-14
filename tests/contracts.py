@@ -12,6 +12,9 @@ MockERC20_ARTIFACT = json.loads(
 WETH9_ARTIFACT = json.loads(
     Path(__file__).parent.joinpath("contracts/WETH9.json").read_text()
 )
+MULTICALL3ROUTER_ARTIFACT = json.loads(
+    Path(__file__).parent.joinpath("contracts/Multicall3Router.json").read_text()
+)
 
 WETH_SALT = 999
 WETH_ADDRESS = create2_address(get_initcode(WETH9_ARTIFACT), WETH_SALT)
