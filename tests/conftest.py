@@ -82,7 +82,5 @@ async def fork_w3() -> AsyncGenerator[AsyncWeb3, None]:
         "https://eth-mainnet.public.blastapi.io",
         "--fork-block-number",
         "18000000",
-        "--chain-id",
-        "1337",
     ) as w3:
         yield w3
