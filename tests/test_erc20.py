@@ -2,6 +2,8 @@ import pytest
 from eth_contract.create2 import create2_address, create2_deploy
 from eth_contract.create3 import create3_address, create3_deploy
 from eth_contract.erc20 import ERC20
+from eth_contract.multicall3 import (MULTICALL3, MULTICALL3_ADDRESS,
+                                     Call3Value, multicall)
 from eth_contract.utils import ZERO_ADDRESS, balance_of, get_initcode
 from eth_contract.weth import WETH
 
@@ -67,3 +69,54 @@ async def test_weth(w3):
     fee += receipt["effectiveGasPrice"] * receipt["gasUsed"]
     await balance_of(w3, WETH_ADDRESS, acct) == 0
     assert await balance_of(w3, ZERO_ADDRESS, acct) == before - fee
+
+
+@pytest.mark.asyncio
+async def test_batch_call(w3):
+    users = (await w3.eth.accounts)[:10]
+    amount = 1000
+    amount_all = amount * len(users)
+
+    balances = [(WETH_ADDRESS, ERC20.fns.balanceOf(user)) for user in users]
+    assert all(x == 0 for x in await multicall(w3, balances))
+
+    await MULTICALL3.fns.aggregate3Value(
+        [Call3Value(WETH_ADDRESS, False, amount_all, WETH.fns.deposit().data)]
+        + [
+            Call3Value(WETH_ADDRESS, False, 0, ERC20.fns.transfer(user, amount).data)
+            for user in users
+        ]
+    ).transact(w3, tx={"from": users[0], "to": MULTICALL3_ADDRESS, "value": amount_all})
+
+    assert all(x == amount for x in await multicall(w3, balances))
+
+    for user in users:
+        await ERC20.fns.approve(MULTICALL3_ADDRESS, amount).transact(
+            w3, tx={"from": user, "to": WETH_ADDRESS}
+        )
+
+    await MULTICALL3.fns.aggregate3Value(
+        [
+            Call3Value(
+                WETH_ADDRESS,
+                False,
+                0,
+                ERC20.fns.transferFrom(user, MULTICALL3_ADDRESS, amount).data,
+            )
+            for user in users
+        ]
+        + [
+            Call3Value(
+                WETH_ADDRESS,
+                False,
+                0,
+                WETH.fns.transferFrom(MULTICALL3_ADDRESS, users[0], amount_all).data,
+            ),
+        ]
+    ).transact(w3, tx={"from": users[0], "to": MULTICALL3_ADDRESS})
+    await WETH.fns.withdraw(amount_all).transact(
+        w3, tx={"from": users[0], "to": WETH_ADDRESS}
+    )
+
+    assert all(x == 0 for x in await multicall(w3, balances))
+    assert await balance_of(w3, WETH_ADDRESS, MULTICALL3_ADDRESS) == 0

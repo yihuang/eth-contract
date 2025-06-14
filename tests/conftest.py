@@ -57,7 +57,9 @@ async def anvil_w3(port: int, *args) -> AsyncGenerator[AsyncWeb3, None]:
 
     try:
         await await_port(port)
-        w3 = AsyncWeb3(AsyncHTTPProvider(f"http://localhost:{port}"))
+        w3 = AsyncWeb3(
+            AsyncHTTPProvider(f"http://localhost:{port}", cache_allowed_requests=True)
+        )
         await ensure_multicall3_deployed(w3)
         await ensure_createx_deployed(w3)
         await deploy_weth(w3)
