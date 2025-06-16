@@ -43,7 +43,7 @@ async def multicall(
     )
     values = []
     for (_, fn), (success, data) in zip(calls, results):
-        if success:
+        if success and data:
             values.append(fn.decode(data))
         else:
             values.append(None)
