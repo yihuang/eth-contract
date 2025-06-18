@@ -5,9 +5,11 @@ from eth_contract.create3 import create3_address, create3_deploy
 from eth_contract.erc20 import ERC20
 from eth_contract.multicall3 import (MULTICALL3, MULTICALL3_ADDRESS,
                                      Call3Value, multicall)
-from eth_contract.utils import ZERO_ADDRESS, balance_of, get_initcode
+from eth_contract.utils import (ZERO_ADDRESS, balance_of, get_initcode,
+                                send_transaction)
 from eth_contract.weth import WETH
 
+from .conftest import MULTICALL3ROUTER
 from .contracts import (MULTICALL3ROUTER_ARTIFACT, WETH_ADDRESS,
                         MockERC20_ARTIFACT)
 
@@ -125,9 +127,7 @@ async def test_multicall3_router(w3):
     amount = 1000
     amount_all = amount * len(users)
     router = Contract(MULTICALL3ROUTER_ARTIFACT["abi"])
-    multicall3 = await create2_deploy(
-        w3, users[0], get_initcode(MULTICALL3ROUTER_ARTIFACT, MULTICALL3_ADDRESS)
-    )
+    multicall3 = MULTICALL3ROUTER
 
     balances = [(WETH_ADDRESS, ERC20.fns.balanceOf(user)) for user in users]
     assert all(x == 0 for x in await multicall(w3, balances))
@@ -183,5 +183,35 @@ async def test_multicall3_router(w3):
 
 
 @pytest.mark.asyncio
-async def test_7702(w3):
-    pass
+async def test_7702(w3, test_accounts):
+    acct = test_accounts[0]
+    multicall3 = MULTICALL3ROUTER
+
+    nonce = await w3.eth.get_transaction_count(acct.address)
+    chain_id = await w3.eth.chain_id
+    auth = acct.sign_authorization(
+        {
+            "chainId": chain_id,
+            "address": multicall3,
+            "nonce": nonce + 1,
+        }
+    )
+    amount = 1000
+    calls = [
+        Call3Value(WETH_ADDRESS, False, amount, WETH.fns.deposit().data),
+        Call3Value(WETH_ADDRESS, False, 0, WETH.fns.withdraw(amount).data),
+    ]
+    before = await balance_of(w3, ZERO_ADDRESS, acct.address)
+    receipt = await send_transaction(
+        w3,
+        acct,
+        chainId=chain_id,
+        to=acct.address,
+        value=amount,
+        nonce=nonce,
+        authorizationList=[auth],
+        data=MULTICALL3.fns.aggregate3Value(calls).data,
+    )
+    fee = receipt["effectiveGasPrice"] * receipt["gasUsed"]
+    after = await balance_of(w3, ZERO_ADDRESS, acct.address)
+    assert after == before - fee
