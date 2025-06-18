@@ -8,17 +8,21 @@ from eth_abi import encode
 from eth_abi.codec import ABICodec
 from eth_abi.registry import registry as default_registry
 from eth_account.signers.base import BaseAccount
-from eth_typing import ABI, ABIConstructor, ABIEvent, ABIFunction
+from eth_typing import (ABI, ABIConstructor, ABIEvent, ABIFunction,
+                        ChecksumAddress)
 from eth_utils import (abi_to_signature, filter_abi_by_name,
                        filter_abi_by_type,
                        function_signature_to_4byte_selector,
                        get_abi_input_types, get_abi_output_types,
                        get_normalized_abi_inputs, keccak)
+from eth_utils.toolz import assoc
 from hexbytes import HexBytes
+from typing_extensions import Unpack
 from web3 import AsyncWeb3
 from web3._utils.events import get_event_data
 from web3.exceptions import MismatchedABI
-from web3.types import EventData, LogReceipt, TxParams, TxReceipt
+from web3.types import (BlockIdentifier, EventData, LogReceipt, StateOverride,
+                        TxParams, TxReceipt)
 from web3.utils.abi import (_mismatched_abi_error_diagnosis,
                             check_if_arguments_can_be_encoded)
 
@@ -91,20 +95,26 @@ class ContractFunction:
         self._resolve_to(matched[0])
         self.arguments = get_normalized_abi_inputs(self.abi, *args, **kwargs)
         self.encoded_args = encode(self.input_types, self.arguments)
+        self.data = HexBytes(self.selector + self.encoded_args)
         return self
 
-    @property
-    def data(self) -> HexBytes:
-        return HexBytes(self.selector + self.encoded_args)
-
-    async def call(self, w3: AsyncWeb3, tx: TxParams | None = None, **kwargs) -> Any:
+    async def call(
+        self,
+        w3: AsyncWeb3,
+        block_identifier: BlockIdentifier | None = None,
+        state_override: StateOverride | None = None,
+        ccip_read_enabled: bool | None = None,
+        **tx: Unpack[TxParams],
+    ) -> Any:
         """
         Call the function on the contract at the given address.
         """
-        if tx is None:
-            tx = {}
-        tx = {**tx, "data": self.data}
-        return_data = await w3.eth.call(tx, **kwargs)
+        return_data = await w3.eth.call(
+            transaction=assoc(tx, "data", self.data),
+            block_identifier=block_identifier,
+            state_override=state_override,
+            ccip_read_enabled=ccip_read_enabled,
+        )
         return self.decode(return_data, codec=w3.codec)
 
     def decode(self, data: bytes, codec=None) -> Any:
@@ -113,15 +123,13 @@ class ContractFunction:
         return data[0] if len(data) == 1 else data
 
     async def transact(
-        self, w3: AsyncWeb3, acct: BaseAccount | None = None, tx: TxParams | None = None
+        self, w3: AsyncWeb3, acct: BaseAccount | ChecksumAddress, **tx: Unpack[TxParams]
     ) -> TxReceipt:
         """
         Send a transaction to the contract with the given data.
         """
-        if tx is None:
-            tx = {}
-        tx = {**tx, "data": self.data}
-        return await send_transaction(w3, acct, tx=tx)
+        tx = assoc(tx, "data", self.data)
+        return await send_transaction(w3, acct, **tx)
 
 
 @dataclass

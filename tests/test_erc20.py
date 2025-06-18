@@ -18,7 +18,7 @@ async def test_erc20_live(fork_w3):
     addr = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"  # USDC
     balance = await ERC20.fns.balanceOf(
         "0x0000000000000000000000000000000000000000"
-    ).call(fork_w3, {"to": addr})
+    ).call(fork_w3, to=addr)
     assert isinstance(balance, int)
 
 
@@ -27,17 +27,16 @@ async def test_create2_deploy(w3):
     owner = (await w3.eth.accounts)[0]
     salt = 100
     initcode = get_initcode(MockERC20_ARTIFACT, "TEST", "TEST", 18)
-    token = await create2_deploy(w3, initcode, salt=salt, extra={"from": owner})
+    token = await create2_deploy(w3, owner, initcode, salt=salt)
     assert (
         token
         == create2_address(initcode, salt)
         == "0x854d811d90C6E81B84b29C1d7ed957843cF87bba"
     )
 
-    tx = {"to": token, "from": owner}
-    assert await ERC20.fns.balanceOf(owner).call(w3, tx=tx) == 0
-    await ERC20.fns.mint(owner, 1000).transact(w3, tx=tx)
-    assert await ERC20.fns.balanceOf(owner).call(w3, tx=tx) == 1000
+    assert await ERC20.fns.balanceOf(owner).call(w3, to=token) == 0
+    await ERC20.fns.mint(owner, 1000).transact(w3, owner, to=token)
+    assert await ERC20.fns.balanceOf(owner).call(w3, to=token) == 1000
 
 
 @pytest.mark.asyncio
@@ -45,29 +44,24 @@ async def test_create3_deploy(w3):
     owner = (await w3.eth.accounts)[0]
     salt = 200
     initcode = get_initcode(MockERC20_ARTIFACT, "TEST", "TEST", 18)
-    token = await create3_deploy(w3, initcode, salt=salt, extra={"from": owner})
+    token = await create3_deploy(w3, owner, initcode, salt=salt)
     assert (
         token == create3_address(salt) == "0x60f7B32B5799838a480572Aee2A8F0355f607b38"
     )
 
-    tx = {"to": token, "from": owner}
-    assert await ERC20.fns.balanceOf(owner).call(w3, tx=tx) == 0
-    await ERC20.fns.mint(owner, 1000).transact(w3, tx=tx)
-    assert await ERC20.fns.balanceOf(owner).call(w3, tx=tx) == 1000
+    assert await ERC20.fns.balanceOf(owner).call(w3, to=token) == 0
+    await ERC20.fns.mint(owner, 1000).transact(w3, owner, to=token)
+    assert await ERC20.fns.balanceOf(owner).call(w3, to=token) == 1000
 
 
 @pytest.mark.asyncio
 async def test_weth(w3):
     acct = (await w3.eth.accounts)[0]
     before = await balance_of(w3, ZERO_ADDRESS, acct)
-    receipt = await WETH.fns.deposit().transact(
-        w3, tx={"from": acct, "to": WETH_ADDRESS, "value": 1000}
-    )
+    receipt = await WETH.fns.deposit().transact(w3, acct, to=WETH_ADDRESS, value=1000)
     fee = receipt["effectiveGasPrice"] * receipt["gasUsed"]
     await balance_of(w3, WETH_ADDRESS, acct) == 1000
-    receipt = await WETH.fns.withdraw(1000).transact(
-        w3, tx={"from": acct, "to": WETH_ADDRESS}
-    )
+    receipt = await WETH.fns.withdraw(1000).transact(w3, acct, to=WETH_ADDRESS)
     fee += receipt["effectiveGasPrice"] * receipt["gasUsed"]
     await balance_of(w3, WETH_ADDRESS, acct) == 0
     assert await balance_of(w3, ZERO_ADDRESS, acct) == before - fee
@@ -88,13 +82,13 @@ async def test_batch_call(w3):
             Call3Value(WETH_ADDRESS, False, 0, ERC20.fns.transfer(user, amount).data)
             for user in users
         ]
-    ).transact(w3, tx={"from": users[0], "to": MULTICALL3_ADDRESS, "value": amount_all})
+    ).transact(w3, users[0], to=MULTICALL3_ADDRESS, value=amount_all)
 
     assert all(x == amount for x in await multicall(w3, balances))
 
     for user in users:
         await ERC20.fns.approve(MULTICALL3_ADDRESS, amount).transact(
-            w3, tx={"from": user, "to": WETH_ADDRESS}
+            w3, user, to=WETH_ADDRESS
         )
 
     await MULTICALL3.fns.aggregate3Value(
@@ -115,10 +109,8 @@ async def test_batch_call(w3):
                 WETH.fns.transferFrom(MULTICALL3_ADDRESS, users[0], amount_all).data,
             ),
         ]
-    ).transact(w3, tx={"from": users[0], "to": MULTICALL3_ADDRESS})
-    await WETH.fns.withdraw(amount_all).transact(
-        w3, tx={"from": users[0], "to": WETH_ADDRESS}
-    )
+    ).transact(w3, users[0], to=MULTICALL3_ADDRESS)
+    await WETH.fns.withdraw(amount_all).transact(w3, users[0], to=WETH_ADDRESS)
 
     assert all(x == 0 for x in await multicall(w3, balances))
     assert await balance_of(w3, WETH_ADDRESS, MULTICALL3_ADDRESS) == 0
@@ -127,16 +119,14 @@ async def test_batch_call(w3):
 @pytest.mark.asyncio
 async def test_multicall3_router(w3):
     """
-    multicall3 extends standard multicall3 with some more abilities
+    multicall3router extends standard multicall3 with some more abilities
     """
     users = (await w3.eth.accounts)[:10]
     amount = 1000
     amount_all = amount * len(users)
     router = Contract(MULTICALL3ROUTER_ARTIFACT["abi"])
     multicall3 = await create2_deploy(
-        w3,
-        get_initcode(MULTICALL3ROUTER_ARTIFACT, MULTICALL3_ADDRESS),
-        extra={"from": users[0]},
+        w3, users[0], get_initcode(MULTICALL3ROUTER_ARTIFACT, MULTICALL3_ADDRESS)
     )
 
     balances = [(WETH_ADDRESS, ERC20.fns.balanceOf(user)) for user in users]
@@ -151,7 +141,7 @@ async def test_multicall3_router(w3):
             Call3Value(WETH_ADDRESS, False, 0, ERC20.fns.transfer(user, amount).data)
             for user in users
         ]
-    ).transact(w3, tx={"from": users[0], "to": multicall3, "value": amount_all})
+    ).transact(w3, users[0], to=multicall3, value=amount_all)
     before -= receipt["effectiveGasPrice"] * receipt["gasUsed"]
 
     # check users's weth balances
@@ -160,7 +150,7 @@ async def test_multicall3_router(w3):
     # approve multicall3 to transfer WETH on behalf of users
     for i, user in enumerate(users):
         receipt = await ERC20.fns.approve(multicall3, amount).transact(
-            w3, tx={"from": user, "to": WETH_ADDRESS}
+            w3, user, to=WETH_ADDRESS
         )
         if i == 0:
             before -= receipt["effectiveGasPrice"] * receipt["gasUsed"]
@@ -186,7 +176,7 @@ async def test_multicall3_router(w3):
                 router.fns.sellToPool(ZERO_ADDRESS, 10000, users[0], 0, b"").data,
             ),
         ]
-    ).transact(w3, tx={"from": users[0], "to": multicall3})
+    ).transact(w3, users[0], to=multicall3)
     before -= receipt["effectiveGasPrice"] * receipt["gasUsed"]
 
     assert all(x == 0 for x in await multicall(w3, balances))

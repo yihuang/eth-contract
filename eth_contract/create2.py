@@ -1,6 +1,7 @@
 from eth_account.signers.base import BaseAccount
 from eth_typing import ChecksumAddress
 from eth_utils import keccak, to_bytes, to_checksum_address
+from typing_extensions import Unpack
 from web3 import AsyncWeb3
 from web3.types import TxParams
 
@@ -28,11 +29,11 @@ def create2_tx(initcode: bytes, salt: bytes, factory=CREATE2_FACTORY) -> TxParam
 
 async def create2_deploy(
     w3: AsyncWeb3,
+    acct: BaseAccount | ChecksumAddress,
     initcode: bytes,
-    acct: BaseAccount | None = None,
     salt: bytes | int = 0,
     factory=CREATE2_FACTORY,
-    extra: TxParams | None = None,  # extra tx parameters
+    **extra: Unpack[TxParams],
 ) -> ChecksumAddress:
     """
     Deploy a contract using create2 factory.
@@ -40,8 +41,8 @@ async def create2_deploy(
     if isinstance(salt, int):
         salt = salt.to_bytes(32, "big")
     tx = create2_tx(initcode, salt, factory)
-    tx.update(extra or {})
-    await send_transaction(w3, acct, tx)
+    tx.update(extra)
+    await send_transaction(w3, acct, **tx)
     return create2_address(initcode, salt, factory)
 
 
@@ -115,11 +116,10 @@ if __name__ == "__main__":
         else:
             keystore_path = Path(args.keystore)
 
-        tx: TxParams = {"value": args.value}
         account = args.account or os.environ["ETH_FROM"]
-        acct = load_account(account, keystore=keystore_path)
-        if acct is None:
-            tx["from"] = to_checksum_address(account)
+        acct = load_account(account, keystore=keystore_path) or to_checksum_address(
+            account
+        )
 
         w3 = AsyncWeb3(AsyncHTTPProvider(args.rpc_url))
         artifact = json.loads(Path(args.artifact).read_text())
@@ -132,7 +132,7 @@ if __name__ == "__main__":
         else:
             print(f"Deploying contract to {addr}")
             return await create2_deploy(
-                w3, initcode, acct, args.salt, factory, extra=tx
+                w3, acct, initcode, args.salt, factory, value=args.value
             )
 
     asyncio.run(main())

@@ -38,9 +38,7 @@ async def multicall(
     allow_failure=False,
 ) -> list[Any]:
     call3 = [Call3(target, allow_failure, fn.data) for target, fn in calls]
-    results = await MULTICALL3.fns.aggregate3(call3).call(
-        w3, {"to": MULTICALL3_ADDRESS}
-    )
+    results = await MULTICALL3.fns.aggregate3(call3).call(w3, to=MULTICALL3_ADDRESS)
     values = []
     for (_, fn), (success, data) in zip(calls, results):
         if success and data:

@@ -9,7 +9,7 @@ from eth_account import Account
 from eth_account.signers.base import BaseAccount
 from eth_account.types import TransactionDictType
 from eth_typing import ChecksumAddress
-from eth_utils import to_bytes, to_checksum_address, to_normalized_address
+from eth_utils import to_bytes, to_checksum_address
 from eth_utils.toolz import assoc
 from typing_extensions import Unpack
 from web3 import AsyncWeb3
@@ -20,46 +20,56 @@ from web3.types import Nonce, TxParams, TxReceipt, Wei
 ZERO_ADDRESS = to_checksum_address("0x0000000000000000000000000000000000000000")
 
 
-async def sign_transaction(w3: AsyncWeb3, acct: BaseAccount, tx: TxParams):
-    "fill default fields and sign"
-    tx = assoc(tx, "from", acct.address)
+async def fill_transaction_defaults(w3: AsyncWeb3, **tx: Unpack[TxParams]) -> TxParams:
+    """
+    Fill in default fields for a transaction
+    """
     tx = await async_fill_nonce(w3, tx)
     tx = await async_fill_transaction_defaults(w3, tx)
+    return tx
+
+
+async def sign_transaction(w3: AsyncWeb3, acct: BaseAccount, **tx: Unpack[TxParams]):
+    "fill default fields and sign"
+    tx = assoc(tx, "from", acct.address)
+    tx = await fill_transaction_defaults(w3, **tx)
     return acct.sign_transaction(cast(TransactionDictType, tx))
 
 
 async def send_transactions(
     w3: AsyncWeb3,
-    account: BaseAccount | None,
     txs: list[TxParams],
+    account: BaseAccount | ChecksumAddress | None = None,
     /,
     check: bool = True,
-    **kwargs: Unpack[TxParams],
+    **extra: Unpack[TxParams],
 ) -> list[TxReceipt]:
     """
     Send a batch of transactions, filling in increasing nonces for the same sender
     if not provided.
     """
-    nonces: dict[str, int] = {}
+    nonces: dict[ChecksumAddress, int] = {}
 
     async def get_nonce(addr: ChecksumAddress) -> Nonce:
         "simulate nonce increase locally"
-        naddr = to_normalized_address(addr)
-        if naddr not in nonces:
-            nonces[naddr] = await w3.eth.get_transaction_count(addr)
+        if addr not in nonces:
+            nonces[addr] = await w3.eth.get_transaction_count(addr)
         else:
-            nonces[naddr] += 1
-        return Nonce(nonces[naddr])
+            nonces[addr] += 1
+        return Nonce(nonces[addr])
+
+    if account is not None:
+        extra.setdefault(
+            "from", account.address if isinstance(account, BaseAccount) else account
+        )
 
     txhashes = []
     for tx in txs:
-        tx = {**tx, **kwargs}
-        if "from" not in tx and account is not None:
-            tx["from"] = account.address
+        tx = {**tx, **extra}
         if "nonce" not in tx:
             tx["nonce"] = await get_nonce(to_checksum_address(tx["from"]))
-        if account is not None:
-            signed = await sign_transaction(w3, account, tx)
+        if isinstance(account, BaseAccount):
+            signed = await sign_transaction(w3, account, **tx)
             txhash = await w3.eth.send_raw_transaction(signed.raw_transaction)
         else:
             txhash = await w3.eth.send_transaction(tx)
@@ -77,15 +87,15 @@ async def send_transactions(
 
 async def send_transaction(
     w3: AsyncWeb3,
-    account: BaseAccount | None = None,
-    tx: TxParams | None = None,
+    account: BaseAccount | ChecksumAddress,
     check: bool = True,
+    **tx: Unpack[TxParams],
 ) -> TxReceipt:
     """
     account: if provided, sign transaction locally and call `eth_sendRawTransaction`,
              otherwise, call `eth_sendTransaction` with the `from` field in the tx.
     """
-    return (await send_transactions(w3, account, [tx or {}], check=check))[0]
+    return (await send_transactions(w3, [tx], account, check=check))[0]
 
 
 def get_default_keystore() -> Path:
@@ -202,11 +212,7 @@ async def transfer(
                 "data": ERC20.fns.transfer(to, amount).data,
             }
         )
-    if isinstance(from_, BaseAccount):
-        await send_transaction(w3, account=from_, tx=tx)
-    else:
-        tx = assoc(tx, "from", from_)
-        await send_transaction(w3, tx=tx)
+    await send_transaction(w3, from_, **tx)
 
 
 async def balance_of(
@@ -218,7 +224,7 @@ async def balance_of(
     if token == ZERO_ADDRESS:
         return await w3.eth.get_balance(address)
 
-    return await ERC20.fns.balanceOf(address).call(w3, {"to": token})
+    return await ERC20.fns.balanceOf(address).call(w3, to=token)
 
 
 async def deploy_presigned_tx(
