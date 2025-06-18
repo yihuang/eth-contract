@@ -56,12 +56,13 @@ async def test_create3_deploy(w3):
 
 @pytest.mark.asyncio
 async def test_weth(w3):
+    weth = WETH(to=WETH_ADDRESS)
     acct = (await w3.eth.accounts)[0]
     before = await balance_of(w3, ZERO_ADDRESS, acct)
-    receipt = await WETH.fns.deposit().transact(w3, acct, to=WETH_ADDRESS, value=1000)
+    receipt = await weth.fns.deposit().transact(w3, acct, value=1000)
     fee = receipt["effectiveGasPrice"] * receipt["gasUsed"]
     await balance_of(w3, WETH_ADDRESS, acct) == 1000
-    receipt = await WETH.fns.withdraw(1000).transact(w3, acct, to=WETH_ADDRESS)
+    receipt = await weth.fns.withdraw(1000).transact(w3, acct)
     fee += receipt["effectiveGasPrice"] * receipt["gasUsed"]
     await balance_of(w3, WETH_ADDRESS, acct) == 0
     assert await balance_of(w3, ZERO_ADDRESS, acct) == before - fee
@@ -69,6 +70,7 @@ async def test_weth(w3):
 
 @pytest.mark.asyncio
 async def test_batch_call(w3):
+    weth = WETH(to=WETH_ADDRESS)
     users = (await w3.eth.accounts)[:10]
     amount = 1000
     amount_all = amount * len(users)
@@ -77,12 +79,12 @@ async def test_batch_call(w3):
     assert all(x == 0 for x in await multicall(w3, balances))
 
     await MULTICALL3.fns.aggregate3Value(
-        [Call3Value(WETH_ADDRESS, False, amount_all, WETH.fns.deposit().data)]
+        [Call3Value(WETH_ADDRESS, False, amount_all, weth.fns.deposit().data)]
         + [
             Call3Value(WETH_ADDRESS, False, 0, ERC20.fns.transfer(user, amount).data)
             for user in users
         ]
-    ).transact(w3, users[0], to=MULTICALL3_ADDRESS, value=amount_all)
+    ).transact(w3, users[0], value=amount_all)
 
     assert all(x == amount for x in await multicall(w3, balances))
 
@@ -95,22 +97,20 @@ async def test_batch_call(w3):
         [
             Call3Value(
                 WETH_ADDRESS,
-                False,
-                0,
-                ERC20.fns.transferFrom(user, MULTICALL3_ADDRESS, amount).data,
+                data=ERC20.fns.transferFrom(user, MULTICALL3_ADDRESS, amount).data,
             )
             for user in users
         ]
         + [
             Call3Value(
                 WETH_ADDRESS,
-                False,
-                0,
-                WETH.fns.transferFrom(MULTICALL3_ADDRESS, users[0], amount_all).data,
+                data=weth.fns.transferFrom(
+                    MULTICALL3_ADDRESS, users[0], amount_all
+                ).data,
             ),
         ]
-    ).transact(w3, users[0], to=MULTICALL3_ADDRESS)
-    await WETH.fns.withdraw(amount_all).transact(w3, users[0], to=WETH_ADDRESS)
+    ).transact(w3, users[0])
+    await weth.fns.withdraw(amount_all).transact(w3, users[0], to=WETH_ADDRESS)
 
     assert all(x == 0 for x in await multicall(w3, balances))
     assert await balance_of(w3, WETH_ADDRESS, MULTICALL3_ADDRESS) == 0
@@ -160,20 +160,15 @@ async def test_multicall3_router(w3):
     receipt = await MULTICALL3.fns.aggregate3Value(
         [
             Call3Value(
-                WETH_ADDRESS,
-                False,
-                0,
-                ERC20.fns.transferFrom(user, multicall3, amount).data,
+                WETH_ADDRESS, data=ERC20.fns.transferFrom(user, multicall3, amount).data
             )
             for user in users
         ]
         + [
-            Call3Value(WETH_ADDRESS, False, 0, WETH.fns.withdraw(amount_all).data),
+            Call3Value(WETH_ADDRESS, data=WETH.fns.withdraw(amount_all).data),
             Call3Value(
                 multicall3,
-                False,
-                0,
-                router.fns.sellToPool(ZERO_ADDRESS, 10000, users[0], 0, b"").data,
+                data=router.fns.sellToPool(ZERO_ADDRESS, 10000, users[0], 0, b"").data,
             ),
         ]
     ).transact(w3, users[0], to=multicall3)
@@ -185,3 +180,8 @@ async def test_multicall3_router(w3):
 
     # user get all funds back other than gas fees
     assert await balance_of(w3, ZERO_ADDRESS, users[0]) == before
+
+
+@pytest.mark.asyncio
+async def test_7702(w3):
+    pass

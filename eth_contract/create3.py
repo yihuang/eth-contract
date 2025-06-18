@@ -19,7 +19,7 @@ CREATE3_PROXY_HASH = to_bytes(
 CREATEX_ABI = json.loads(
     Path(__file__).parent.joinpath("abis/createx.json").read_text()
 )
-CREATEX = Contract(CREATEX_ABI)
+CREATEX = Contract(CREATEX_ABI, tx={"to": CREATEX_FACTORY})
 
 
 def create3_address(

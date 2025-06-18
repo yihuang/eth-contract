@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence, cast
 
 from eth_abi import encode
@@ -15,7 +15,7 @@ from eth_utils import (abi_to_signature, filter_abi_by_name,
                        function_signature_to_4byte_selector,
                        get_abi_input_types, get_abi_output_types,
                        get_normalized_abi_inputs, keccak)
-from eth_utils.toolz import assoc
+from eth_utils.toolz import assoc, merge
 from hexbytes import HexBytes
 from typing_extensions import Unpack
 from web3 import AsyncWeb3
@@ -48,6 +48,7 @@ class ContractConstructor:
 @dataclass
 class ContractFunction:
     abis: Sequence[ABIFunction]
+    parent: Contract | None = None
 
     def __post_init__(self) -> None:
         self._resolve_to(self.abis[0])
@@ -109,6 +110,8 @@ class ContractFunction:
         """
         Call the function on the contract at the given address.
         """
+        if self.parent is not None:
+            tx = merge(self.parent.tx, tx)
         return_data = await w3.eth.call(
             transaction=assoc(tx, "data", self.data),
             block_identifier=block_identifier,
@@ -128,8 +131,9 @@ class ContractFunction:
         """
         Send a transaction to the contract with the given data.
         """
-        tx = assoc(tx, "data", self.data)
-        return await send_transaction(w3, acct, **tx)
+        if self.parent is not None:
+            tx = merge(self.parent.tx, tx)
+        return await send_transaction(w3, acct, **assoc(tx, "data", self.data))
 
 
 @dataclass
@@ -158,14 +162,18 @@ class ContractEvent:
             return None
 
 
-class ContractFunctions(dict, Mapping[str, Sequence[ABIFunction]]):
+@dataclass
+class ContractFunctions:
+    abis: Mapping[str, Sequence[ABIFunction]]
+    parent: Contract | None = None
+
     def __getattr__(self, name: str) -> ContractFunction:
         try:
-            abis = self[name]
+            abis = self.abis[name]
         except KeyError:
             raise AttributeError(f"No such function: {name}")
 
-        return ContractFunction(abis)
+        return ContractFunction(abis, parent=self.parent)
 
 
 @dataclass
@@ -190,15 +198,16 @@ class ContractEvents:
 @dataclass
 class Contract:
     abi: ABI
+    tx: TxParams = field(default_factory=lambda: TxParams())
 
     receive: ContractFunction | None = None
     fallback: ContractFunction | None = None
 
     def __post_init__(self) -> None:
-        fns: defaultdict[str, list[ABIFunction]] = defaultdict(list)
+        abis: defaultdict[str, list[ABIFunction]] = defaultdict(list)
         for fn in filter_abi_by_type("function", self.abi):
-            fns[fn["name"]].append(fn)
-        self.fns = ContractFunctions(fns)
+            abis[fn["name"]].append(fn)
+        self.fns = ContractFunctions(abis, self)
 
         self.events = ContractEvents(filter_abi_by_type("event", self.abi))
 
@@ -212,6 +221,12 @@ class Contract:
 
         if filter_abi_by_type("fallback", self.abi):
             self.fallback = ContractFunction([{"type": "function", "name": "fallback"}])
+
+    def __call__(self, **tx: Unpack[TxParams]) -> Contract:
+        """
+        Bind contract to different transaction parameters.
+        """
+        return Contract(self.abi, tx=merge(self.tx, tx))
 
 
 if __name__ == "__main__":
@@ -236,7 +251,7 @@ if __name__ == "__main__":
     contract = Contract(abi)
     if contract.constructor:
         print(f"constructor\t{abi_to_signature(contract.constructor.abi)}")
-    for fn_name, fns in contract.fns.items():
+    for fn_name, fns in contract.fns.abis.items():
         for fn in fns:
             print(f"function\t{abi_to_signature(fn)}")
     for event in contract.events.abis:

@@ -29,7 +29,7 @@ MULTICALL3_ADDRESS = to_checksum_address("0xcA11bde05977b3631167028862bE2a173976
 MULTICALL3_ABI = json.loads(
     Path(__file__).parent.joinpath("abis/multicall3.json").read_text()
 )
-MULTICALL3 = Contract(MULTICALL3_ABI)
+MULTICALL3 = Contract(MULTICALL3_ABI, {"to": MULTICALL3_ADDRESS})
 
 
 async def multicall(
@@ -38,7 +38,7 @@ async def multicall(
     allow_failure=False,
 ) -> list[Any]:
     call3 = [Call3(target, allow_failure, fn.data) for target, fn in calls]
-    results = await MULTICALL3.fns.aggregate3(call3).call(w3, to=MULTICALL3_ADDRESS)
+    results = await MULTICALL3.fns.aggregate3(call3).call(w3)
     values = []
     for (_, fn), (success, data) in zip(calls, results):
         if success and data:
