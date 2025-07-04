@@ -7,7 +7,8 @@ import pytest
 import pytest_asyncio
 from eth_account import Account
 from eth_account.signers.base import BaseAccount
-from eth_contract.create2 import create2_address, create2_deploy
+from eth_contract.create2 import (CREATE2_FACTORY, create2_address,
+                                  create2_deploy)
 from eth_contract.create3 import CREATEX_FACTORY
 from eth_contract.multicall3 import MULTICALL3_ADDRESS
 from eth_contract.utils import deploy_presigned_tx, get_initcode
@@ -42,6 +43,17 @@ async def await_port(port: int, retries: int = 100, host="127.0.0.1") -> None:
     )
 
 
+async def ensure_create2_deployed(w3: AsyncWeb3):
+    "https://github.com/Arachnid/deterministic-deployment-proxy"
+    deployer_address = to_checksum_address("0x3fab184622dc19b6109349b94811493bf2a45362")
+    tx = bytes.fromhex(
+        Path(__file__).parent.joinpath("txs/create2.tx").read_text().strip()[2:]
+    )
+    await deploy_presigned_tx(
+        w3, tx, deployer_address, CREATE2_FACTORY, fee=Wei(10**16)
+    )
+
+
 async def ensure_multicall3_deployed(w3: AsyncWeb3):
     "https://github.com/mds1/multicall3#new-deployments"
     deployer_address = to_checksum_address("0x05f32b3cc3888453ff71b01135b34ff8e41263f2")
@@ -62,7 +74,7 @@ async def ensure_createx_deployed(w3: AsyncWeb3):
     )
 
 
-async def ensure_create2_deployed(
+async def ensure_deployed_by_create2(
     w3: AsyncWeb3, initcode: bytes, salt: bytes | int = 0
 ) -> ChecksumAddress:
     user = (await w3.eth.accounts)[0]
@@ -88,10 +100,11 @@ async def anvil_w3(port: int, *args) -> AsyncGenerator[AsyncWeb3, None]:
         w3 = AsyncWeb3(
             AsyncHTTPProvider(f"http://localhost:{port}", cache_allowed_requests=True)
         )
+        await ensure_create2_deployed(w3)
         await ensure_multicall3_deployed(w3)
         await ensure_createx_deployed(w3)
         await deploy_weth(w3)
-        assert MULTICALL3ROUTER == await ensure_create2_deployed(
+        assert MULTICALL3ROUTER == await ensure_deployed_by_create2(
             w3, get_initcode(MULTICALL3ROUTER_ARTIFACT, MULTICALL3_ADDRESS)
         )
         yield w3
