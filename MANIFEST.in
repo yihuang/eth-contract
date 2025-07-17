@@ -1,1 +1,2 @@
 include eth_contract/abis/*.json
+include eth_contract/txs/*.tx
