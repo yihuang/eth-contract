@@ -1,5 +1,6 @@
-from eth_contract import Contract
 from eth_typing import ABI
+
+from eth_contract import Contract
 
 
 def test_receive_fallback() -> None:
