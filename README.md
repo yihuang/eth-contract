@@ -25,3 +25,12 @@ Please open issue if you want to see more ABIs included.
   * Permit2
   * multicall
   * etc
+
+## Project Setup
+
+1. Install [nix](https://nixos.org/download/)
+2. Install [direnv](https://direnv.net/) and [nix-direnv](https://github.com/nix-community/nix-direnv)
+3. `uv sync --frozen` to install all dependencies. (Without `--fronzen`, [`uv` version after v0.6.15 modifies the `uv.lock`](https://github.com/dependabot/dependabot-core/issues/12127))
+4. `pytest` to run all tests
+
+If you are able to run all tests, you are ready to go!
