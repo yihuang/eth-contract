@@ -57,8 +57,7 @@ if __name__ == "__main__":
     from web3 import AsyncHTTPProvider, AsyncWeb3
     from web3.types import TxParams
 
-    from .utils import (get_default_keystore, get_initcode, load_account,
-                        parse_cli_arg)
+    from .utils import get_default_keystore, get_initcode, load_account, parse_cli_arg
 
     argparser = argparse.ArgumentParser(
         description="Deploy a contract using create2 factory"

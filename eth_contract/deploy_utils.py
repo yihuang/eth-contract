@@ -1,14 +1,14 @@
 from pathlib import Path
 
-from eth_contract.create2 import (CREATE2_FACTORY, create2_address,
-                                  create2_deploy)
-from eth_contract.create3 import CREATEX_FACTORY
-from eth_contract.multicall3 import MULTICALL3_ADDRESS
-from eth_contract.utils import deploy_presigned_tx
 from eth_typing import ChecksumAddress
 from eth_utils import to_checksum_address
 from web3 import AsyncWeb3
 from web3.types import Wei
+
+from eth_contract.create2 import CREATE2_FACTORY, create2_address, create2_deploy
+from eth_contract.create3 import CREATEX_FACTORY
+from eth_contract.multicall3 import MULTICALL3_ADDRESS
+from eth_contract.utils import deploy_presigned_tx
 
 
 async def ensure_create2_deployed(w3: AsyncWeb3):
