@@ -28,10 +28,8 @@ Please open issue if you want to see more ABIs included.
 
 ## Project Setup
 
-1. Install nix
-2. Install direnv
-    1. If terminal is bash, add `eval "$(direnv hook bash)"` to `~/.bashrc`, if terminal is zsh, add `eval "$(direnv hook zsh)"` to `~/.zshrc` and [etc](https://github.com/direnv/direnv/issues/476).
-    2. Relaunch terminal or run `direnv allow` in the project root.
+1. Install [nix](https://nixos.org/download/)
+2. Install [direnv](https://direnv.net/) and [nix-direnv](https://github.com/nix-community/nix-direnv)
 3. `uv sync --frozen` to install all dependencies. (Without `--fronzen`, [`uv` version after v0.6.15 modifies the `uv.lock`](https://github.com/dependabot/dependabot-core/issues/12127))
 4. `pytest` to run all tests
 
