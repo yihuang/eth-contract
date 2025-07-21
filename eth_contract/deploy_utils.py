@@ -1,44 +1,62 @@
 from pathlib import Path
 
-from eth_contract.create2 import (CREATE2_FACTORY, create2_address,
-                                  create2_deploy)
-from eth_contract.create3 import CREATEX_FACTORY
-from eth_contract.multicall3 import MULTICALL3_ADDRESS
-from eth_contract.utils import deploy_presigned_tx
+import rlp
+from eth_account._utils.legacy_transactions import Transaction
 from eth_typing import ChecksumAddress
-from eth_utils import to_checksum_address
+from hexbytes import HexBytes
 from web3 import AsyncWeb3
 from web3.types import Wei
+
+from .create2 import CREATE2_FACTORY, create2_address, create2_deploy
+from .create3 import CREATEX_FACTORY
+from .history_storage import HISTORY_STORAGE_ADDRESS
+from .multicall3 import MULTICALL3_ADDRESS
+from .utils import deploy_presigned_tx
 
 
 async def ensure_create2_deployed(w3: AsyncWeb3):
     "https://github.com/Arachnid/deterministic-deployment-proxy"
-    deployer_address = to_checksum_address("0x3fab184622dc19b6109349b94811493bf2a45362")
     tx = bytes.fromhex(
         Path(__file__).parent.joinpath("txs/create2.tx").read_text().strip()[2:]
     )
-    await deploy_presigned_tx(
-        w3, tx, deployer_address, CREATE2_FACTORY, fee=Wei(10**16)
-    )
+    await deploy_presigned_tx(w3, tx, CREATE2_FACTORY, fee=Wei(10**16))
 
 
 async def ensure_multicall3_deployed(w3: AsyncWeb3):
     "https://github.com/mds1/multicall3#new-deployments"
-    deployer_address = to_checksum_address("0x05f32b3cc3888453ff71b01135b34ff8e41263f2")
     tx = bytes.fromhex(
         Path(__file__).parent.joinpath("txs/multicall3.tx").read_text().strip()[2:]
     )
-    await deploy_presigned_tx(w3, tx, deployer_address, MULTICALL3_ADDRESS)
+    await deploy_presigned_tx(w3, tx, MULTICALL3_ADDRESS)
 
 
 async def ensure_createx_deployed(w3: AsyncWeb3):
     "https://github.com/pcaversaccio/createx#new-deployments"
-    deployer_address = to_checksum_address("0xeD456e05CaAb11d66C4c797dD6c1D6f9A7F352b5")
     tx = bytes.fromhex(
         Path(__file__).parent.joinpath("txs/createx.tx").read_text().strip()[2:]
     )
+    await deploy_presigned_tx(w3, tx, CREATEX_FACTORY, fee=Wei(3 * 10**17))
+
+
+async def ensure_history_storage_deployed(w3: AsyncWeb3):
+    "https://eips.ethereum.org/EIPS/eip-2935"
+    tx = Transaction(
+        gas=0x3D090,
+        gasPrice=0xE8D4A51000,
+        data=HexBytes(
+            "0x60538060095f395ff33373fffffffffffffffffffffffffffffffffffffffe14"
+            "604657602036036042575f35600143038111604257611fff8143031160425761"
+            "1fff9006545f5260205ff35b5f5ffd5b5f35611fff60014303065500"
+        ),
+        v=0x1B,
+        r=0x539,
+        s=0xAA12693182426612186309F02CFE8A80A0000,
+        nonce=0,
+        value=0,
+        to=b"",
+    )
     await deploy_presigned_tx(
-        w3, tx, deployer_address, CREATEX_FACTORY, fee=Wei(3 * 10**17)
+        w3, rlp.encode(tx), HISTORY_STORAGE_ADDRESS, fee=tx.gasPrice * tx.gas
     )
 
 

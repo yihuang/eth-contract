@@ -230,7 +230,6 @@ async def balance_of(
 async def deploy_presigned_tx(
     w3: AsyncWeb3,
     tx: bytes,
-    deployer: ChecksumAddress,
     contract: ChecksumAddress,
     funder: BaseAccount | None = None,
     fee: Wei = Wei(10**17),  # default to 0.1eth
@@ -245,6 +244,7 @@ async def deploy_presigned_tx(
         # already deployed
         return
 
+    deployer = Account.recover_transaction(tx)
     if await w3.eth.get_balance(deployer) < fee:
         # fund the deployer if needed
         await transfer(
