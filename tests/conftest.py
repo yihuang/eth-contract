@@ -13,6 +13,7 @@ from eth_contract.deploy_utils import (
     ensure_create2_deployed,
     ensure_createx_deployed,
     ensure_deployed_by_create2,
+    ensure_history_storage_deployed,
     ensure_multicall3_deployed,
 )
 from eth_contract.multicall3 import MULTICALL3_ADDRESS
@@ -59,6 +60,7 @@ async def anvil_w3(port: int, *args) -> AsyncGenerator[AsyncWeb3, None]:
         await ensure_multicall3_deployed(w3)
         await ensure_createx_deployed(w3)
         await deploy_weth(w3)
+        await ensure_history_storage_deployed(w3)
         assert MULTICALL3ROUTER == await ensure_deployed_by_create2(
             w3, get_initcode(MULTICALL3ROUTER_ARTIFACT, MULTICALL3_ADDRESS)
         )
