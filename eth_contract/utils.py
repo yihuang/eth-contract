@@ -231,7 +231,7 @@ async def deploy_presigned_tx(
     w3: AsyncWeb3,
     tx: bytes,
     contract: ChecksumAddress,
-    funder: BaseAccount | ChecksumAddress | None,
+    funder: BaseAccount | ChecksumAddress | None = None,
     fee: Wei = Wei(10**17),  # default to 0.1eth
 ):
     """
