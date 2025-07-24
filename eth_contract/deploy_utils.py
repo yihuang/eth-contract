@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import rlp
+import rlp  # type: ignore
 from eth_account._utils.legacy_transactions import Transaction
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
