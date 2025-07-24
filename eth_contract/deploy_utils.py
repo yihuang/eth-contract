@@ -73,18 +73,3 @@ async def ensure_deployed_by_create2(
 
     print(f"Deploying contract at {addr} using create2")
     return await create2_deploy(w3, user, initcode, salt=salt, value=Wei(0))
-
-
-async def ensure_weth_deployed(
-    w3: AsyncWeb3, initcode: bytes, salt: bytes | int = 0
-) -> ChecksumAddress:
-    user = (await w3.eth.accounts)[0]
-    if isinstance(salt, int):
-        salt = salt.to_bytes(32, "big")
-    addr = create2_address(initcode, salt)
-    if await w3.eth.get_code(addr):
-        print(f"Weth already deployed at {addr}")
-        return addr
-
-    print(f"Deploying weth at {addr} using create2")
-    return await create2_deploy(w3, user, initcode, salt=salt)
