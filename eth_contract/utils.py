@@ -231,13 +231,13 @@ async def deploy_presigned_tx(
     w3: AsyncWeb3,
     tx: bytes,
     contract: ChecksumAddress,
-    funder: BaseAccount | None = None,
+    funder: BaseAccount | ChecksumAddress | None,
     fee: Wei = Wei(10**17),  # default to 0.1eth
 ):
     """
     deploy well known contracts with a presigned transaction.
 
-    funder: default to the first account in the node,
+    funder: account to fund the deployer if needed.
     fee: default to 0.1 ETH.
     """
     if await w3.eth.get_code(contract):
@@ -247,9 +247,9 @@ async def deploy_presigned_tx(
     deployer = Account.recover_transaction(tx)
     if await w3.eth.get_balance(deployer) < fee:
         # fund the deployer if needed
-        await transfer(
-            w3, ZERO_ADDRESS, funder or (await w3.eth.accounts)[0], deployer, fee
-        )
+        if funder is None:
+            raise ValueError("Deployer needs to be funded, but no funder provided")
+        await transfer(w3, ZERO_ADDRESS, funder, deployer, fee)
 
     receipt = await w3.eth.wait_for_transaction_receipt(
         await w3.eth.send_raw_transaction(tx)

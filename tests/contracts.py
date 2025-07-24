@@ -3,8 +3,6 @@ from pathlib import Path
 
 from eth_contract.create2 import create2_address
 from eth_contract.utils import get_initcode
-from web3 import AsyncWeb3
-from eth_contract.deploy_utils import ensure_deployed_by_create2
 
 MockERC20_ARTIFACT = json.loads(
     Path(__file__).parent.joinpath("contracts/MockERC20.json").read_text()
@@ -18,10 +16,3 @@ MULTICALL3ROUTER_ARTIFACT = json.loads(
 
 WETH_SALT = 999
 WETH_ADDRESS = create2_address(get_initcode(WETH9_ARTIFACT), WETH_SALT)
-
-
-async def deploy_weth(w3: AsyncWeb3) -> None:
-    address = await ensure_deployed_by_create2(
-        w3, get_initcode(WETH9_ARTIFACT), salt=WETH_SALT
-    )
-    assert address == WETH_ADDRESS, f"Expected {WETH_ADDRESS}, got {address}"
