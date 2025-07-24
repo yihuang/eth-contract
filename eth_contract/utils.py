@@ -13,8 +13,10 @@ from eth_utils import to_bytes, to_checksum_address
 from eth_utils.toolz import assoc
 from typing_extensions import Unpack
 from web3 import AsyncWeb3
-from web3._utils.async_transactions import (async_fill_nonce,
-                                            async_fill_transaction_defaults)
+from web3._utils.async_transactions import (
+    async_fill_nonce,
+    async_fill_transaction_defaults,
+)
 from web3.types import Nonce, TxParams, TxReceipt, Wei
 
 ZERO_ADDRESS = to_checksum_address("0x0000000000000000000000000000000000000000")

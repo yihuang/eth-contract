@@ -1,10 +1,11 @@
 import json
 from pathlib import Path
 
-from eth_contract.create2 import create2_address
-from eth_contract.utils import get_initcode
 from web3 import AsyncWeb3
+
+from eth_contract.create2 import create2_address
 from eth_contract.deploy_utils import ensure_deployed_by_create2
+from eth_contract.utils import get_initcode
 
 MockERC20_ARTIFACT = json.loads(
     Path(__file__).parent.joinpath("contracts/MockERC20.json").read_text()

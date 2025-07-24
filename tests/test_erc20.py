@@ -1,17 +1,20 @@
 import pytest
+
 from eth_contract.contract import Contract
 from eth_contract.create2 import create2_address, create2_deploy
 from eth_contract.create3 import create3_address, create3_deploy
 from eth_contract.erc20 import ERC20
-from eth_contract.multicall3 import (MULTICALL3, MULTICALL3_ADDRESS,
-                                     Call3Value, multicall)
-from eth_contract.utils import (ZERO_ADDRESS, balance_of, get_initcode,
-                                send_transaction)
+from eth_contract.multicall3 import (
+    MULTICALL3,
+    MULTICALL3_ADDRESS,
+    Call3Value,
+    multicall,
+)
+from eth_contract.utils import ZERO_ADDRESS, balance_of, get_initcode, send_transaction
 from eth_contract.weth import WETH
 
 from .conftest import MULTICALL3ROUTER
-from .contracts import (MULTICALL3ROUTER_ARTIFACT, WETH_ADDRESS,
-                        MockERC20_ARTIFACT)
+from .contracts import MULTICALL3ROUTER_ARTIFACT, WETH_ADDRESS, MockERC20_ARTIFACT
 
 
 @pytest.mark.asyncio
