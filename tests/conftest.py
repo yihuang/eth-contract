@@ -19,7 +19,8 @@ from eth_contract.deploy_utils import (
 from eth_contract.multicall3 import MULTICALL3_ADDRESS
 from eth_contract.utils import get_initcode
 
-from .contracts import MULTICALL3ROUTER_ARTIFACT, deploy_weth
+from .contracts import (MULTICALL3ROUTER_ARTIFACT, WETH9_ARTIFACT,
+                        WETH_ADDRESS, WETH_SALT)
 
 Account.enable_unaudited_hdwallet_features()
 TEST_MNEMONIC = (
@@ -56,13 +57,16 @@ async def anvil_w3(port: int, *args) -> AsyncGenerator[AsyncWeb3, None]:
         w3 = AsyncWeb3(
             AsyncHTTPProvider(f"http://localhost:{port}", cache_allowed_requests=True)
         )
-        await ensure_create2_deployed(w3)
-        await ensure_multicall3_deployed(w3)
-        await ensure_createx_deployed(w3)
-        await deploy_weth(w3)
-        await ensure_history_storage_deployed(w3)
+        account = (await w3.eth.accounts)[0]
+        await ensure_create2_deployed(w3, account)
+        await ensure_multicall3_deployed(w3, account)
+        await ensure_createx_deployed(w3, account)
+        assert WETH_ADDRESS == await ensure_deployed_by_create2(
+            w3, account, get_initcode(WETH9_ARTIFACT), salt=WETH_SALT
+        )
+        await ensure_history_storage_deployed(w3, account)
         assert MULTICALL3ROUTER == await ensure_deployed_by_create2(
-            w3, get_initcode(MULTICALL3ROUTER_ARTIFACT, MULTICALL3_ADDRESS)
+            w3, account, get_initcode(MULTICALL3ROUTER_ARTIFACT, MULTICALL3_ADDRESS)
         )
         yield w3
     finally:
