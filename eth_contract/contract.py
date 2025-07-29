@@ -26,6 +26,7 @@ from web3.types import (BlockIdentifier, EventData, LogReceipt, StateOverride,
 from web3.utils.abi import (_mismatched_abi_error_diagnosis,
                             check_if_arguments_can_be_encoded)
 
+from .dehumanizer import dehumanize
 from .utils import send_transaction
 
 
@@ -49,6 +50,15 @@ class ContractConstructor:
 class ContractFunction:
     abis: Sequence[ABIFunction]
     parent: Contract | None = None
+
+    @classmethod
+    def from_abi(cls, i: ABIFunction | str) -> ContractFunction:
+        if isinstance(i, str):
+            abi = dehumanize(i)
+            assert abi["type"] == "function"
+        else:
+            abi = i
+        return cls([abi])
 
     def __post_init__(self) -> None:
         self._resolve_to(self.abis[0])
