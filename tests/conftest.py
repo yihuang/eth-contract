@@ -6,15 +6,18 @@ import pytest
 import pytest_asyncio
 from eth_account import Account
 from eth_account.signers.base import BaseAccount
+from web3 import AsyncHTTPProvider, AsyncWeb3
+
 from eth_contract.create2 import create2_address
-from eth_contract.deploy_utils import (ensure_create2_deployed,
-                                       ensure_createx_deployed,
-                                       ensure_deployed_by_create2,
-                                       ensure_history_storage_deployed,
-                                       ensure_multicall3_deployed)
+from eth_contract.deploy_utils import (
+    ensure_create2_deployed,
+    ensure_createx_deployed,
+    ensure_deployed_by_create2,
+    ensure_history_storage_deployed,
+    ensure_multicall3_deployed,
+)
 from eth_contract.multicall3 import MULTICALL3_ADDRESS
 from eth_contract.utils import get_initcode
-from web3 import AsyncHTTPProvider, AsyncWeb3
 
 from .contracts import (MULTICALL3ROUTER_ARTIFACT, WETH9_ARTIFACT,
                         WETH_ADDRESS, WETH_SALT)

@@ -1,4 +1,5 @@
 import pytest
+
 from eth_contract.history_storage import HISTORY_STORAGE_ADDRESS
 
 
