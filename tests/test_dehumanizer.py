@@ -1,4 +1,5 @@
 import pytest
+
 from eth_contract.contract import ContractFunction
 from eth_contract.dehumanizer import dehumanize, parse_parentheses
 
@@ -49,7 +50,7 @@ def test_dehumanize():
     }
     assert dehumanize("function transfer(address,uint256)") == {
         "inputs": [{"type": "address"}, {"type": "uint256"}],
-        "name": "function transfer",
+        "name": "transfer",
         "outputs": [],
         "type": "function",
     }

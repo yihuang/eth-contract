@@ -100,19 +100,24 @@ def dehumanize(s, type="function") -> ABIElement:
     """
     parts = parse_parentheses(s)
     if len(parts) == 2:
-        # "transfer(address,uint256)"
         name, inputs = parts
         outputs = []
-    elif len(parts) == 3:
-        if isinstance(parts[1], list):
-            # "balanceOf(address)(uint256)"
-            name, inputs, outputs = parts
+        parts = name.split(maxsplit=1)
+        if len(parts) == 2:
+            # "function transfer(address,uint256)"
+            type, name = parts
         else:
-            # "event Transfer(address)"
-            type, name, inputs = parts
-    elif len(parts) == 4:
-        # "function balanceOf(address)(uint256)"
-        type, name, inputs, outputs = parts
+            # "transfer(address,uint256)"
+            name = parts[0]
+    elif len(parts) == 3:
+        name, inputs, outputs = parts
+        parts = name.split(maxsplit=1)
+        if len(parts) == 2:
+            # "function balanceOf(address)(uint256)"
+            type, name = parts
+        else:
+            # "balanceOf(address)(uint256)"
+            name = parts[0]
     else:
         raise ValueError("Invalid ABI format")
 
