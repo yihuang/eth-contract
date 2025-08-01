@@ -1,4 +1,13 @@
+import asyncio
+import io
+import json
+from contextlib import redirect_stdout
+
+import pyrevm
 import pytest
+from eth_utils import keccak, to_hex
+from hexbytes import HexBytes
+from web3.types import TxParams
 
 from eth_contract.contract import Contract
 from eth_contract.create2 import create2_address, create2_deploy
@@ -25,6 +34,45 @@ async def test_erc20_live(fork_w3):
         "0x0000000000000000000000000000000000000000"
     ).call(fork_w3, to=addr)
     assert isinstance(balance, int)
+
+
+def solidity_mapping_loc(index: int, address: bytes) -> bytes:
+    return keccak(address.rjust(32, b"\x00") + index.to_bytes(32, "big"))
+
+
+def vyper_mapping_loc(index: int, address: bytes) -> bytes:
+    return keccak(address.rjust(32, b"\x00") + index.to_bytes(32, "big"))
+
+
+@pytest.mark.asyncio
+async def test_erc20_balance_overrides(fork_w3) -> None:
+    """
+    play with erc20 storage slots
+    """
+    w3 = fork_w3
+    token = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"  # USDC
+    addr = (1000000).to_bytes(20, "big")
+    balance = 99999
+    # tx: TxParams = {
+    #     "to": token,
+    #     "data": ERC20.fns.balanceOf(addr).data,
+    # }
+    # rsp = await w3.provider.make_request("debug_traceCall", [tx, "latest"])
+    # print(json.dumps(rsp, indent=2))
+    locs = [solidity_mapping_loc(i, addr) for i in range(0, 10)] + [
+        vyper_mapping_loc(i, addr) for i in range(0, 10)
+    ]
+    await asyncio.gather(
+        *[
+            w3.provider.make_request(
+                "anvil_setStorageAt",
+                [token, to_hex(loc), balance.to_bytes(32, "big")],
+            )
+            for loc in locs
+        ]
+    )
+
+    assert (await ERC20.fns.balanceOf(addr).call(w3, to=token)) == balance
 
 
 @pytest.mark.asyncio
@@ -218,3 +266,17 @@ async def test_7702(w3, test_accounts):
     fee = receipt["effectiveGasPrice"] * receipt["gasUsed"]
     after = await balance_of(w3, ZERO_ADDRESS, acct.address)
     assert after == before - fee
+
+
+def test_pyrevm_trace():
+    fork = "https://eth-mainnet.public.blastapi.io"
+    vm = pyrevm.EVM(fork_url=fork, tracing=True)
+    addr = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"  # USDC
+    whale = "0x37305B1cD40574E4C5Ce33f8e8306Be057fD7341"
+    with redirect_stdout(io.StringIO()) as out:
+        vm.message_call(caller=whale, to=addr, calldata=ERC20.fns.balanceOf(whale).data)
+    out.seek(0)
+    for line in out.readlines():
+        item = json.loads(line)
+        if item.get("opName") == "SLOAD":
+            print(item)
