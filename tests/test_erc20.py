@@ -5,9 +5,7 @@ from contextlib import redirect_stdout
 
 import pyrevm
 import pytest
-from eth_utils import keccak, to_hex
-from hexbytes import HexBytes
-from web3.types import TxParams
+from eth_utils import keccak, to_checksum_address, to_hex
 
 from eth_contract.contract import Contract
 from eth_contract.create2 import create2_address, create2_deploy
@@ -19,7 +17,13 @@ from eth_contract.multicall3 import (
     Call3Value,
     multicall,
 )
-from eth_contract.utils import ZERO_ADDRESS, balance_of, get_initcode, send_transaction
+from eth_contract.utils import (
+    ETH_MAINNET_FORK,
+    ZERO_ADDRESS,
+    balance_of,
+    get_initcode,
+    send_transaction,
+)
 from eth_contract.weth import WETH
 
 from .conftest import MULTICALL3ROUTER
@@ -269,8 +273,7 @@ async def test_7702(w3, test_accounts):
 
 
 def test_pyrevm_trace():
-    fork = "https://eth-mainnet.public.blastapi.io"
-    vm = pyrevm.EVM(fork_url=fork, tracing=True)
+    vm = pyrevm.EVM(fork_url=ETH_MAINNET_FORK, tracing=True)
     addr = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"  # USDC
     whale = "0x37305B1cD40574E4C5Ce33f8e8306Be057fD7341"
     with redirect_stdout(io.StringIO()) as out:
@@ -280,3 +283,35 @@ def test_pyrevm_trace():
         item = json.loads(line)
         if item.get("opName") == "SLOAD":
             print(item)
+
+
+def test_pyrevm_trace_log():
+    vm = pyrevm.EVM(fork_url=ETH_MAINNET_FORK, tracing=True)
+    WETH_ADDRESS = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+    whale = "0x44663D61BD6Ad13848D1E90b1F5940eB6836D2F5"
+    deposit_amount = 2589000000000000
+    vm = pyrevm.EVM(fork_url=ETH_MAINNET_FORK, tracing=True)
+    deposit_fn = "Deposit(address,uint256)"
+    deposit_hash = f"0x{keccak(deposit_fn.encode()).hex()}"
+    with redirect_stdout(io.StringIO()) as out:
+        vm.message_call(
+            caller=whale,
+            to=WETH_ADDRESS,
+            value=deposit_amount,
+            calldata=WETH.fns.deposit().data,
+        )
+    out.seek(0)
+    trace_lines = out.readlines()
+    for line in trace_lines:
+        item = json.loads(line)
+        print(item)
+        if "opName" in item:
+            op = item["opName"]
+            if op.startswith("LOG"):
+                # LOG2 -> 2, LOG0 -> 0 etc
+                num_topics = int(op[3])
+                stack = item["stack"]
+                topics = stack[-(2 + num_topics) : -2][::-1]
+                print(topics)
+                assert topics[0] == deposit_hash, "deposit event hash mismatch"
+                assert to_checksum_address(topics[1]) == whale, "whale address mismatch"

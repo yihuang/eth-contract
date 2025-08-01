@@ -17,10 +17,14 @@ from eth_contract.deploy_utils import (
     ensure_multicall3_deployed,
 )
 from eth_contract.multicall3 import MULTICALL3_ADDRESS
-from eth_contract.utils import get_initcode
+from eth_contract.utils import ETH_MAINNET_FORK, get_initcode
 
-from .contracts import (MULTICALL3ROUTER_ARTIFACT, WETH9_ARTIFACT,
-                        WETH_ADDRESS, WETH_SALT)
+from .contracts import (
+    MULTICALL3ROUTER_ARTIFACT,
+    WETH9_ARTIFACT,
+    WETH_ADDRESS,
+    WETH_SALT,
+)
 
 Account.enable_unaudited_hdwallet_features()
 TEST_MNEMONIC = (
@@ -99,7 +103,7 @@ async def fork_w3() -> AsyncGenerator[AsyncWeb3, None]:
         "--mnemonic",
         TEST_MNEMONIC,
         "--fork-url",
-        "https://eth-mainnet.public.blastapi.io",
+        ETH_MAINNET_FORK,
         "--fork-block-number",
         "18000000",
     ) as w3:
