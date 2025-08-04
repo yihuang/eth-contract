@@ -197,6 +197,7 @@ async def transfer(
     from_: BaseAccount | ChecksumAddress,
     to: ChecksumAddress,
     amount: Wei,
+    **extra: Unpack[TxParams],
 ):
     from .erc20 import ERC20
 
@@ -216,7 +217,7 @@ async def transfer(
                 "data": ERC20.fns.transfer(to, amount).data,
             }
         )
-    await send_transaction(w3, from_, **tx)
+    await send_transaction(w3, from_, **tx, **extra)
 
 
 async def balance_of(
