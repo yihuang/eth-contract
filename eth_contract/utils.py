@@ -1,6 +1,7 @@
 import json
 import os
 import platform
+from decimal import Decimal
 from getpass import getpass
 from pathlib import Path
 from typing import cast
@@ -251,7 +252,9 @@ async def deploy_presigned_tx(
     if await w3.eth.get_balance(deployer) < fee:
         # fund the deployer if needed
         if funder is None:
-            raise ValueError("Deployer needs to be funded, but no funder provided")
+            raise ValueError(
+                f"funder not provided, please fund {Decimal(fee)/10**18} to the deployer {deployer} manually"
+            )
         await transfer(w3, ZERO_ADDRESS, funder, deployer, fee)
 
     receipt = await w3.eth.wait_for_transaction_receipt(
