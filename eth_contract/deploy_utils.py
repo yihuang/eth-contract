@@ -5,8 +5,9 @@ from eth_account._utils.legacy_transactions import Transaction
 from eth_account.signers.base import BaseAccount
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
+from typing_extensions import Unpack
 from web3 import AsyncWeb3
-from web3.types import Wei
+from web3.types import TxParams, Wei
 
 from .create2 import CREATE2_FACTORY, create2_address, create2_deploy
 from .create3 import CREATEX_FACTORY
@@ -16,37 +17,47 @@ from .utils import deploy_presigned_tx
 
 
 async def ensure_create2_deployed(
-    w3: AsyncWeb3, funder: BaseAccount | ChecksumAddress | None = None
+    w3: AsyncWeb3,
+    funder: BaseAccount | ChecksumAddress | None = None,
+    **extra: Unpack[TxParams],
 ):
     "https://github.com/Arachnid/deterministic-deployment-proxy"
     tx = bytes.fromhex(
         Path(__file__).parent.joinpath("txs/create2.tx").read_text().strip()[2:]
     )
-    await deploy_presigned_tx(w3, tx, CREATE2_FACTORY, funder, fee=Wei(10**16))
+    await deploy_presigned_tx(w3, tx, CREATE2_FACTORY, funder, fee=Wei(10**16), **extra)
 
 
 async def ensure_multicall3_deployed(
-    w3: AsyncWeb3, funder: BaseAccount | ChecksumAddress | None = None
+    w3: AsyncWeb3,
+    funder: BaseAccount | ChecksumAddress | None = None,
+    **extra: Unpack[TxParams],
 ):
     "https://github.com/mds1/multicall3#new-deployments"
     tx = bytes.fromhex(
         Path(__file__).parent.joinpath("txs/multicall3.tx").read_text().strip()[2:]
     )
-    await deploy_presigned_tx(w3, tx, MULTICALL3_ADDRESS, funder)
+    await deploy_presigned_tx(w3, tx, MULTICALL3_ADDRESS, funder, **extra)
 
 
 async def ensure_createx_deployed(
-    w3: AsyncWeb3, funder: BaseAccount | ChecksumAddress | None = None
+    w3: AsyncWeb3,
+    funder: BaseAccount | ChecksumAddress | None = None,
+    **extra: Unpack[TxParams],
 ):
     "https://github.com/pcaversaccio/createx#new-deployments"
     tx = bytes.fromhex(
         Path(__file__).parent.joinpath("txs/createx.tx").read_text().strip()[2:]
     )
-    await deploy_presigned_tx(w3, tx, CREATEX_FACTORY, funder, fee=Wei(3 * 10**17))
+    await deploy_presigned_tx(
+        w3, tx, CREATEX_FACTORY, funder, fee=Wei(3 * 10**17), **extra
+    )
 
 
 async def ensure_history_storage_deployed(
-    w3: AsyncWeb3, funder: BaseAccount | ChecksumAddress | None = None
+    w3: AsyncWeb3,
+    funder: BaseAccount | ChecksumAddress | None = None,
+    **extra: Unpack[TxParams],
 ):
     "https://eips.ethereum.org/EIPS/eip-2935"
     tx = Transaction(
@@ -65,7 +76,12 @@ async def ensure_history_storage_deployed(
         to=b"",
     )
     await deploy_presigned_tx(
-        w3, rlp.encode(tx), HISTORY_STORAGE_ADDRESS, funder, fee=tx.gasPrice * tx.gas
+        w3,
+        rlp.encode(tx),
+        HISTORY_STORAGE_ADDRESS,
+        funder,
+        fee=tx.gasPrice * tx.gas,
+        **extra,
     )
 
 
@@ -74,6 +90,7 @@ async def ensure_deployed_by_create2(
     account: BaseAccount | ChecksumAddress,
     initcode: bytes,
     salt: bytes | int = 0,
+    **extra: Unpack[TxParams],
 ) -> ChecksumAddress:
     if isinstance(salt, int):
         salt = salt.to_bytes(32, "big")
@@ -83,7 +100,4 @@ async def ensure_deployed_by_create2(
         return addr
 
     print(f"Deploying contract at {addr} using create2")
-    price = await w3.eth.gas_price
-    return await create2_deploy(
-        w3, account, initcode, salt=salt, value=Wei(0), gasPrice=price
-    )
+    return await create2_deploy(w3, account, initcode, salt=salt, **extra)

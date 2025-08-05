@@ -201,17 +201,21 @@ async def transfer(
     **extra: Unpack[TxParams],
 ):
     from .erc20 import ERC20
-    tx = TxParams(
-        {
-            "to": receiver,
-        }
-    )
+
+    tx: TxParams
     if token == ZERO_ADDRESS:
         # transfer native currency
-        tx["value"] = amount
+        tx = {
+            "to": receiver,
+            "value": amount,
+        }
     else:
         # transfer ERC20 token
-        tx["data"] = ERC20.fns.transfer(receiver, amount).data
+        tx = {
+            "to": token,
+            "data": ERC20.fns.transfer(receiver, amount).data,
+        }
+
     tx.update(extra)
     await send_transaction(w3, sender, **tx)
 
@@ -234,6 +238,7 @@ async def deploy_presigned_tx(
     contract: ChecksumAddress,
     funder: BaseAccount | ChecksumAddress | None = None,
     fee: Wei = Wei(10**17),  # default to 0.1eth
+    **extra: Unpack[TxParams],
 ):
     """
     deploy well known contracts with a presigned transaction.
@@ -253,8 +258,7 @@ async def deploy_presigned_tx(
                 f"funder not provided, please fund {Decimal(fee)/10**18} "
                 f"to the deployer {deployer} manually"
             )
-        price = await w3.eth.gas_price
-        await transfer(w3, ZERO_ADDRESS, funder, deployer, fee, gasPrice=price)
+        await transfer(w3, ZERO_ADDRESS, funder, deployer, fee, **extra)
 
     receipt = await w3.eth.wait_for_transaction_receipt(
         await w3.eth.send_raw_transaction(tx)
