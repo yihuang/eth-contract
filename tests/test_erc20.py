@@ -304,7 +304,6 @@ def test_pyrevm_trace_log():
     trace_lines = out.readlines()
     for line in trace_lines:
         item = json.loads(line)
-        print(item)
         if "opName" in item:
             op = item["opName"]
             if op.startswith("LOG"):
@@ -312,6 +311,5 @@ def test_pyrevm_trace_log():
                 num_topics = int(op[3])
                 stack = item["stack"]
                 topics = stack[-(2 + num_topics) : -2][::-1]
-                print(topics)
                 assert topics[0] == deposit_hash, "deposit event hash mismatch"
                 assert to_checksum_address(topics[1]) == whale, "whale address mismatch"

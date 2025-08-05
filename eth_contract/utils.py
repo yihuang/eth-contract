@@ -194,29 +194,29 @@ def parse_cli_arg(arg: str) -> str | bytes | int:
 async def transfer(
     w3: AsyncWeb3,
     token: ChecksumAddress,
-    from_: BaseAccount | ChecksumAddress,
-    to: ChecksumAddress,
+    sender: BaseAccount | ChecksumAddress,
+    receiver: ChecksumAddress,
     amount: Wei,
+    **extra: Unpack[TxParams],
 ):
     from .erc20 import ERC20
 
+    tx: TxParams
     if token == ZERO_ADDRESS:
         # transfer native currency
-        tx = TxParams(
-            {
-                "to": to,
-                "value": amount,
-            }
-        )
+        tx = {
+            "to": receiver,
+            "value": amount,
+        }
     else:
         # transfer ERC20 token
-        tx = TxParams(
-            {
-                "to": token,
-                "data": ERC20.fns.transfer(to, amount).data,
-            }
-        )
-    await send_transaction(w3, from_, **tx)
+        tx = {
+            "to": token,
+            "data": ERC20.fns.transfer(receiver, amount).data,
+        }
+
+    tx.update(extra)
+    await send_transaction(w3, sender, **tx)
 
 
 async def balance_of(
@@ -237,6 +237,7 @@ async def deploy_presigned_tx(
     contract: ChecksumAddress,
     funder: BaseAccount | ChecksumAddress | None = None,
     fee: Wei = Wei(10**17),  # default to 0.1eth
+    **extra: Unpack[TxParams],
 ):
     """
     deploy well known contracts with a presigned transaction.
@@ -253,9 +254,10 @@ async def deploy_presigned_tx(
         # fund the deployer if needed
         if funder is None:
             raise ValueError(
-                f"funder not provided, please fund {Decimal(fee)/10**18} to the deployer {deployer} manually"
+                f"funder not provided, please fund {Decimal(fee)/10**18} "
+                f"to the deployer {deployer} manually"
             )
-        await transfer(w3, ZERO_ADDRESS, funder, deployer, fee)
+        await transfer(w3, ZERO_ADDRESS, funder, deployer, fee, **extra)
 
     receipt = await w3.eth.wait_for_transaction_receipt(
         await w3.eth.send_raw_transaction(tx)
