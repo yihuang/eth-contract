@@ -257,7 +257,8 @@ async def deploy_presigned_tx(
                 f"funder not provided, please fund {Decimal(fee)/10**18} ETH "
                 f"to the deployer {deployer} manually"
             )
-        await transfer(w3, ZERO_ADDRESS, funder, deployer, fee)
+        price = await w3.eth.gas_price
+        await transfer(w3, ZERO_ADDRESS, funder, deployer, fee, gasPrice=price)
 
     receipt = await w3.eth.wait_for_transaction_receipt(
         await w3.eth.send_raw_transaction(tx)

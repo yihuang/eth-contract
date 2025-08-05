@@ -83,4 +83,7 @@ async def ensure_deployed_by_create2(
         return addr
 
     print(f"Deploying contract at {addr} using create2")
-    return await create2_deploy(w3, account, initcode, salt=salt, value=Wei(0))
+    price = await w3.eth.gas_price
+    return await create2_deploy(
+        w3, account, initcode, salt=salt, value=Wei(0), gasPrice=price
+    )
