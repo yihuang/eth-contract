@@ -195,30 +195,25 @@ def parse_cli_arg(arg: str) -> str | bytes | int:
 async def transfer(
     w3: AsyncWeb3,
     token: ChecksumAddress,
-    from_: BaseAccount | ChecksumAddress,
-    to: ChecksumAddress,
+    sender: BaseAccount | ChecksumAddress,
+    receiver: ChecksumAddress,
     amount: Wei,
     **extra: Unpack[TxParams],
 ):
     from .erc20 import ERC20
-
+    tx = TxParams(
+        {
+            "to": receiver,
+        }
+    )
     if token == ZERO_ADDRESS:
         # transfer native currency
-        tx = TxParams(
-            {
-                "to": to,
-                "value": amount,
-            }
-        )
+        tx["value"] = amount
     else:
         # transfer ERC20 token
-        tx = TxParams(
-            {
-                "to": token,
-                "data": ERC20.fns.transfer(to, amount).data,
-            }
-        )
-    await send_transaction(w3, from_, **tx, **extra)
+        tx["data"] = ERC20.fns.transfer(receiver, amount).data
+    tx.update(extra)
+    await send_transaction(w3, sender, **tx)
 
 
 async def balance_of(
@@ -255,7 +250,7 @@ async def deploy_presigned_tx(
         # fund the deployer if needed
         if funder is None:
             raise ValueError(
-                f"funder not provided, please fund {Decimal(fee)/10**18} ETH "
+                f"funder not provided, please fund {Decimal(fee)/10**18} "
                 f"to the deployer {deployer} manually"
             )
         price = await w3.eth.gas_price
