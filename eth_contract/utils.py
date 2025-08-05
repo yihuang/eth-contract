@@ -76,7 +76,6 @@ async def send_transactions(
             signed = await sign_transaction(w3, account, **tx)
             txhash = await w3.eth.send_raw_transaction(signed.raw_transaction)
         else:
-            tx = await fill_transaction_defaults(w3, **tx)
             txhash = await w3.eth.send_transaction(tx)
         txhashes.append(txhash)
 
