@@ -54,6 +54,18 @@ def test_dehumanize():
         "outputs": [],
         "type": "function",
     }
+    assert dehumanize("increaseAllowance(address,uint256)", type="function") == {
+        "inputs": [{"type": "address"}, {"type": "uint256"}],
+        "name": "increaseAllowance",
+        "outputs": [],
+        "type": "function",
+    }
+    assert dehumanize("decreaseAllowance(address,uint256)", type="function") == {
+        "inputs": [{"type": "address"}, {"type": "uint256"}],
+        "name": "decreaseAllowance",
+        "outputs": [],
+        "type": "function",
+    }
 
 
 @pytest.mark.asyncio
