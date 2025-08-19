@@ -54,6 +54,13 @@ def test_dehumanize():
         "outputs": [],
         "type": "function",
     }
+    for name in ["increaseAllowance", "decreaseAllowance"]:
+        assert dehumanize(f"{name}(address,uint256)(bool)", type="function") == {
+            "inputs": [{"type": "address"}, {"type": "uint256"}],
+            "name": name,
+            "outputs": [{"type": "bool"}],
+            "type": "function",
+        }
 
 
 @pytest.mark.asyncio
@@ -64,3 +71,10 @@ async def test_human_readable_function(fork_w3):
         fork_w3, to=addr
     )
     assert isinstance(balance, int)
+    for name in ["increaseAllowance", "decreaseAllowance"]:
+        fn = ContractFunction.from_abi(f"{name}(address,uint256)(bool)")
+        assert fn.abis[0]["name"] == name
+        assert fn.abis[0]["inputs"] == [
+            {"type": "address"},
+            {"type": "uint256"},
+        ]
