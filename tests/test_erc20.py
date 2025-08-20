@@ -8,8 +8,6 @@ import pytest
 from eth_utils import keccak, to_checksum_address, to_hex
 
 from eth_contract.contract import Contract
-from eth_contract.create2 import create2_address, create2_deploy
-from eth_contract.create3 import create3_address, create3_deploy
 from eth_contract.erc20 import ERC20
 from eth_contract.multicall3 import (
     MULTICALL3,
@@ -23,6 +21,10 @@ from eth_contract.utils import (
     balance_of,
     get_initcode,
     send_transaction,
+)
+from eth_contract.deploy_utils import (
+    ensure_deployed_by_create2,
+    ensure_deployed_by_create3,
 )
 from eth_contract.weth import WETH
 
@@ -84,16 +86,12 @@ async def test_create2_deploy(w3):
     owner = (await w3.eth.accounts)[0]
     salt = 100
     initcode = get_initcode(MockERC20_ARTIFACT, "TEST", "TEST", 18)
-    token = await create2_deploy(w3, owner, initcode, salt=salt)
-    assert (
-        token
-        == create2_address(initcode, salt)
-        == "0x854d811d90C6E81B84b29C1d7ed957843cF87bba"
-    )
-
-    assert await ERC20.fns.balanceOf(owner).call(w3, to=token) == 0
-    await ERC20.fns.mint(owner, 1000).transact(w3, owner, to=token)
-    assert await ERC20.fns.balanceOf(owner).call(w3, to=token) == 1000
+    token = await ensure_deployed_by_create2(w3, owner, initcode, salt=salt)
+    assert token == "0x854d811d90C6E81B84b29C1d7ed957843cF87bba"
+    balance = await ERC20.fns.balanceOf(owner).call(w3, to=token)
+    amt = 1000
+    await ERC20.fns.mint(owner, amt).transact(w3, owner, to=token)
+    assert await ERC20.fns.balanceOf(owner).call(w3, to=token) == balance + amt
 
 
 @pytest.mark.asyncio
@@ -101,14 +99,12 @@ async def test_create3_deploy(w3):
     owner = (await w3.eth.accounts)[0]
     salt = 200
     initcode = get_initcode(MockERC20_ARTIFACT, "TEST", "TEST", 18)
-    token = await create3_deploy(w3, owner, initcode, salt=salt)
-    assert (
-        token == create3_address(salt) == "0x60f7B32B5799838a480572Aee2A8F0355f607b38"
-    )
-
-    assert await ERC20.fns.balanceOf(owner).call(w3, to=token) == 0
-    await ERC20.fns.mint(owner, 1000).transact(w3, owner, to=token)
-    assert await ERC20.fns.balanceOf(owner).call(w3, to=token) == 1000
+    token = await ensure_deployed_by_create3(w3, owner, initcode, salt=salt)
+    assert token == "0x60f7B32B5799838a480572Aee2A8F0355f607b38"
+    balance = await ERC20.fns.balanceOf(owner).call(w3, to=token)
+    amt = 1000
+    await ERC20.fns.mint(owner, amt).transact(w3, owner, to=token)
+    assert await ERC20.fns.balanceOf(owner).call(w3, to=token) == balance + amt
 
 
 @pytest.mark.asyncio

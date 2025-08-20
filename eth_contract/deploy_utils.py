@@ -10,7 +10,7 @@ from web3 import AsyncWeb3
 from web3.types import TxParams, Wei
 
 from .create2 import CREATE2_FACTORY, create2_address, create2_deploy
-from .create3 import CREATEX_FACTORY
+from .create3 import CREATEX_FACTORY, create3_address, create3_deploy
 from .history_storage import HISTORY_STORAGE_ADDRESS
 from .multicall3 import MULTICALL3_ADDRESS
 from .utils import deploy_presigned_tx
@@ -101,3 +101,21 @@ async def ensure_deployed_by_create2(
 
     print(f"Deploying contract at {addr} using create2")
     return await create2_deploy(w3, account, initcode, salt=salt, **extra)
+
+
+async def ensure_deployed_by_create3(
+    w3: AsyncWeb3,
+    account: BaseAccount | ChecksumAddress,
+    initcode: bytes,
+    salt: bytes | int = 0,
+    **extra: Unpack[TxParams],
+) -> ChecksumAddress:
+    if isinstance(salt, int):
+        salt = salt.to_bytes(32, "big")
+    addr = create3_address(salt)
+    if await w3.eth.get_code(addr):
+        print(f"Contract already deployed at {addr}")
+        return addr
+
+    print(f"Deploying contract at {addr} using create3")
+    return await create3_deploy(w3, account, initcode, salt=salt, **extra)
