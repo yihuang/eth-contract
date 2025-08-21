@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from copy import copy
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence, cast
 
@@ -115,6 +116,7 @@ class ContractFunction:
             )
             raise MismatchedABI(error_diagnosis)
 
+        self = copy(self)
         self._resolve_to(matched[0])
         self.arguments = get_normalized_abi_inputs(self.abi, *args, **kwargs)
         self.encoded_args = encode(self.input_types, self.arguments)
