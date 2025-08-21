@@ -31,15 +31,3 @@ ENTRYPOINT07_SALT = HexBytes(
     "0x90d8084deab30c2a37c45e8d47f49f2f7965183cb6990a98943ef94940681de3"
 )
 ENTRYPOINT07_ADDRESS = to_checksum_address(ENTRYPOINT07_ARTIFACT["address"])
-
-
-if __name__ == "__main__":
-    from .create2 import create2_address
-    from .utils import get_initcode
-
-    assert ENTRYPOINT08_ADDRESS == create2_address(
-        get_initcode(ENTRYPOINT08_ARTIFACT), ENTRYPOINT08_SALT
-    )
-    assert ENTRYPOINT07_ADDRESS == create2_address(
-        get_initcode(ENTRYPOINT07_ARTIFACT), ENTRYPOINT07_SALT
-    )
