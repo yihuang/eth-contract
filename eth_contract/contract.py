@@ -188,16 +188,22 @@ class ContractEvent:
 
 @dataclass
 class ContractFunctions:
-    abis: Mapping[str, Sequence[ABIFunction]]
-    parent: Contract | None = None
+    _abis: Mapping[str, Sequence[ABIFunction]]
+    _parent: Contract | None = None
+    _functions: dict[str, ContractFunction] = field(default_factory=dict)
 
     def __getattr__(self, name: str) -> ContractFunction:
         try:
-            abis = self.abis[name]
+            return self._functions[name]
         except KeyError:
-            raise AttributeError(f"No such function: {name}")
+            try:
+                abis = self._abis[name]
+            except KeyError:
+                raise AttributeError(f"No such function: {name}")
 
-        return ContractFunction(abis, parent=self.parent)
+            fn = ContractFunction(abis, parent=self._parent)
+            self._functions[name] = fn
+            return fn
 
 
 @dataclass
@@ -275,7 +281,7 @@ if __name__ == "__main__":
     contract = Contract(abi)
     if contract.constructor:
         print(f"constructor\t{abi_to_signature(contract.constructor.abi)}")
-    for fn_name, fns in contract.fns.abis.items():
+    for fn_name, fns in contract.fns._abis.items():
         for fn in fns:
             print(f"function\t{abi_to_signature(fn)}")
     for event in contract.events.abis:
