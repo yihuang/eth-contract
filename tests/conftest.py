@@ -16,6 +16,14 @@ from eth_contract.deploy_utils import (
     ensure_history_storage_deployed,
     ensure_multicall3_deployed,
 )
+from eth_contract.entrypoint import (
+    ENTRYPOINT07_ADDRESS,
+    ENTRYPOINT07_ARTIFACT,
+    ENTRYPOINT07_SALT,
+    ENTRYPOINT08_ADDRESS,
+    ENTRYPOINT08_ARTIFACT,
+    ENTRYPOINT08_SALT,
+)
 from eth_contract.multicall3 import MULTICALL3_ADDRESS
 from eth_contract.utils import ETH_MAINNET_FORK, get_initcode
 
@@ -30,6 +38,10 @@ Account.enable_unaudited_hdwallet_features()
 TEST_MNEMONIC = (
     "body bag bird mix language evidence what liar reunion wire lesson evolve"
 )
+TEST_ACCOUNTS = [
+    Account.from_mnemonic(TEST_MNEMONIC, account_path=f"m/44'/60'/0'/0/{i}")
+    for i in range(5)
+]
 MULTICALL3ROUTER = create2_address(
     get_initcode(MULTICALL3ROUTER_ARTIFACT, MULTICALL3_ADDRESS)
 )
@@ -72,6 +84,12 @@ async def anvil_w3(port: int, *args) -> AsyncGenerator[AsyncWeb3, None]:
         assert MULTICALL3ROUTER == await ensure_deployed_by_create2(
             w3, account, get_initcode(MULTICALL3ROUTER_ARTIFACT, MULTICALL3_ADDRESS)
         )
+        assert ENTRYPOINT08_ADDRESS == await ensure_deployed_by_create2(
+            w3, account, get_initcode(ENTRYPOINT08_ARTIFACT), ENTRYPOINT08_SALT
+        )
+        assert ENTRYPOINT07_ADDRESS == await ensure_deployed_by_create2(
+            w3, account, get_initcode(ENTRYPOINT07_ARTIFACT), ENTRYPOINT07_SALT
+        )
         yield w3
     finally:
         proc.terminate()
@@ -113,8 +131,29 @@ async def fork_w3() -> AsyncGenerator[AsyncWeb3, None]:
 @pytest.fixture(scope="session")
 def test_accounts() -> list[BaseAccount]:
     """Test accounts from anvil's deterministic mnemonic"""
-    accounts = [
-        Account.from_mnemonic(TEST_MNEMONIC, account_path=f"m/44'/60'/0'/0/{i}")
-        for i in range(5)
-    ]
-    return accounts
+    return TEST_ACCOUNTS
+
+
+if __name__ == "__main__":
+    """
+    run a network with predeployed contracts
+    """
+
+    async def main():
+        async with anvil_w3(
+            9545,
+            "-q",
+            "--hardfork",
+            "prague",
+            "--mnemonic",
+            TEST_MNEMONIC,
+            "--chain-id",
+            "1337",
+        ) as w3:
+            print("Anvil is running at:", w3.provider.endpoint_uri)
+            print("Test Accounts:")
+            for account in TEST_ACCOUNTS:
+                print(f" - {account.address} (private key: {account.key.to_0x_hex()})")
+            await asyncio.sleep(2**32)
+
+    asyncio.run(main())
