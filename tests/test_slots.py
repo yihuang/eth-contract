@@ -27,7 +27,7 @@ async def test_pyrevm_balance_slot_tracing():
 
     # Capture and parse traces
     vm = pyrevm.EVM(fork_url=ETH_MAINNET_FORK, tracing=True, with_memory=True)
-    traces = trace_call(vm, {"to": token, "data": fn.data})
+    traces = trace_call(vm, to=token, data=fn.data)
 
     # Parse balance slot from traces
     slot = parse_balance_slot(HexBytes(token), user, traces)
@@ -59,7 +59,8 @@ async def test_pyrevm_allowance_slot_tracing():
     # Capture and parse traces
     traces = trace_call(
         pyrevm.EVM(fork_url=ETH_MAINNET_FORK, tracing=True, with_memory=True),
-        {"to": token, "data": fn.data},
+        to=token,
+        data=fn.data,
     )
 
     # Parse allowance slot from traces
