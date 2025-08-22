@@ -13,6 +13,8 @@ Builtin common contract ABIs:
   include cli utility to deploy contract with create3, `python -m eth_contract.create3 --help`.
 * multicall3 (https://github.com/mds1/multicall3)
 * weth (https://github.com/gnosis/canonical-weth)
+* ERC-4337 EntryPoint (v0.7 and v0.8) for account abstraction
+* ABI dehumanizer utility for parsing human-readable ABI definitions
 
 Please open issue if you want to see more ABIs included.
 
@@ -21,9 +23,7 @@ Please open issue if you want to see more ABIs included.
 * event filter arguments building.
 * more tests.
 * more builtin contract ABIs for convenience
-  * Create2/create3 factory
-  * Permit2
-  * multicall
+  * permit2
   * etc
 
 ## Project Setup
