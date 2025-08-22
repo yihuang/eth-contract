@@ -34,7 +34,7 @@ async def test_pyrevm_balance_slot_tracing():
     assert slot is not None
 
     # verify the slot with state overrides
-    bz = os.urandom(32)
+    bz = os.urandom(16).rjust(32, b"\x00")
     w3 = AsyncWeb3(AsyncHTTPProvider(ETH_MAINNET_FORK))
     state = {to_hex(slot.value(user).slot): to_hex(bz)}
     assert int.from_bytes(bz, "big") == await fn.call(
@@ -63,7 +63,7 @@ async def test_pyrevm_allowance_slot_tracing():
     assert slot is not None
 
     # verify the slot with state overrides
-    bz = os.urandom(32)
+    bz = os.urandom(16).rjust(32, b"\x00")
     w3 = AsyncWeb3(AsyncHTTPProvider(ETH_MAINNET_FORK))
     state = {
         to_hex(slot.value(owner).value(spender).slot): to_hex(bz),
