@@ -25,7 +25,7 @@ from eth_contract.entrypoint import (
     ENTRYPOINT08_SALT,
 )
 from eth_contract.multicall3 import MULTICALL3_ADDRESS
-from eth_contract.utils import ETH_MAINNET_FORK, get_initcode
+from eth_contract.utils import get_initcode
 
 from .contracts import (
     MULTICALL3ROUTER_ARTIFACT,
@@ -34,6 +34,7 @@ from .contracts import (
     WETH_SALT,
 )
 
+ETH_MAINNET_FORK = "https://eth-mainnet.public.blastapi.io"
 Account.enable_unaudited_hdwallet_features()
 TEST_MNEMONIC = (
     "body bag bird mix language evidence what liar reunion wire lesson evolve"
