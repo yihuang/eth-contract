@@ -28,3 +28,6 @@ line-length = 88
 
 [tool.isort]
 profile = "black"
+
+[tool.uv.sources]
+pyrevm = { git = "https://github.com/yihuang/pyrevm.git" }

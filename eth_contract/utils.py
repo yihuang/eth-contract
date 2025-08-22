@@ -21,7 +21,6 @@ from web3._utils.async_transactions import (
 from web3.types import Nonce, TxParams, TxReceipt, Wei
 
 ZERO_ADDRESS = to_checksum_address("0x0000000000000000000000000000000000000000")
-ETH_MAINNET_FORK = "https://eth-mainnet.public.blastapi.io"
 
 
 async def fill_transaction_defaults(w3: AsyncWeb3, **tx: Unpack[TxParams]) -> TxParams:
