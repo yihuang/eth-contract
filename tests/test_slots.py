@@ -22,7 +22,7 @@ async def test_pyrevm_balance_slot_tracing():
     """Test balance slot detection with pyrevm tracing"""
     # USDC contract
     token = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-    user = b"\x01".rjust(20)
+    user = b"\x01".rjust(20, b"\x00")
     fn = ERC20.fns.balanceOf(user)
 
     # Capture and parse traces
@@ -36,16 +36,9 @@ async def test_pyrevm_balance_slot_tracing():
     # verify the slot with state overrides
     bz = os.urandom(32)
     w3 = AsyncWeb3(AsyncHTTPProvider(ETH_MAINNET_FORK))
+    state = {to_hex(slot.value(user).slot): to_hex(bz)}
     assert int.from_bytes(bz, "big") == await fn.call(
-        w3,
-        to=token,
-        state_override={
-            token: {
-                "stateDiff": {
-                    to_hex(slot.value(user.rjust(32, b"\x00")).slot): to_hex(bz)
-                },
-            }
-        },
+        w3, to=token, state_override={token: {"stateDiff": state}}
     )
 
 
@@ -54,8 +47,8 @@ async def test_pyrevm_allowance_slot_tracing():
     """Test allowance slot detection with pyrevm tracing and memory support."""
     # USDC contract
     token = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-    owner = b"\x01".rjust(20)
-    spender = b"\x02".rjust(20)
+    owner = b"\x01".rjust(20, b"\x00")
+    spender = b"\x02".rjust(20, b"\x00")
     fn = ERC20.fns.allowance(owner, spender)
 
     # Capture and parse traces
@@ -72,14 +65,9 @@ async def test_pyrevm_allowance_slot_tracing():
     # verify the slot with state overrides
     bz = os.urandom(32)
     w3 = AsyncWeb3(AsyncHTTPProvider(ETH_MAINNET_FORK))
+    state = {
+        to_hex(slot.value(owner).value(spender).slot): to_hex(bz),
+    }
     assert int.from_bytes(bz, "big") == await fn.call(
-        w3,
-        to=token,
-        state_override={
-            token: {
-                "stateDiff": {
-                    to_hex(slot.value(owner).value(spender).slot): to_hex(bz),
-                },
-            }
-        },
+        w3, to=token, state_override={token: {"stateDiff": state}}
     )

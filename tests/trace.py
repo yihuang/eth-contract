@@ -1,7 +1,7 @@
 import io
 import json
 from contextlib import redirect_stdout
-from typing import Unpack
+from typing import Iterable, Unpack
 
 import pyrevm
 from web3.types import TxParams
@@ -9,7 +9,7 @@ from web3.types import TxParams
 from eth_contract.utils import ZERO_ADDRESS
 
 
-def trace_call(vm: pyrevm.EVM, **tx: Unpack[TxParams]) -> list[dict]:
+def trace_call(vm: pyrevm.EVM, **tx: Unpack[TxParams]) -> Iterable[dict]:
     """
     Capture and parse traces from a pyrevm message call.
     """
@@ -22,12 +22,5 @@ def trace_call(vm: pyrevm.EVM, **tx: Unpack[TxParams]) -> list[dict]:
         )
 
     out.seek(0)
-    traces = []
     for line in out.readlines():
-        try:
-            trace_item = json.loads(line)
-            traces.append(trace_item)
-        except json.JSONDecodeError:
-            continue
-
-    return traces
+        yield json.loads(line)
