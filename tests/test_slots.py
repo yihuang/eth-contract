@@ -41,7 +41,9 @@ async def test_pyrevm_balance_slot_tracing():
         to=token,
         state_override={
             token: {
-                "stateDiff": {to_hex(slot.value(user.rjust(32, b"\x00")).slot): to_hex(bz)},
+                "stateDiff": {
+                    to_hex(slot.value(user.rjust(32, b"\x00")).slot): to_hex(bz)
+                },
             }
         },
     )
