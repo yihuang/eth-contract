@@ -2,7 +2,7 @@
 Utilities to parse erc20 slots from trace result.
 
 To override erc20 balance or allowance value for arbitrary account in eth_call, we need
-to know the storage slot of the mappings, erc20 don't standadize these things, normally
+to know the storage slot of the mappings, erc20 don't standardize these things, normally
 we have to find it in the solc compiler output, but we can't do that for arbitrary
 tokens without their source code.
 
@@ -200,7 +200,7 @@ def parse_balance_slot(
     token: bytes, user: bytes, traces: Iterable[dict]
 ) -> MappingSlot | None:
     """
-    detect the balance slot of token contract with a balanceOf trace result
+    detect the balance slot of token contract with a `balanceOf(user)` trace result
     """
     user = user.rjust(32, b"\x00")
     for contract, v0, v1, slot in parse_mapping_reads(token, traces):
@@ -218,7 +218,7 @@ def parse_allowance_slot(
     token: bytes, user: bytes, spender: bytes, traces: Iterable[dict]
 ) -> MappingSlot | None:
     """
-    detect the balance slot of token contract with a balanceOf trace result
+    detect the balance slot of token contract with a `allowance[user][spender]` trace result
     """
     user = user.rjust(32, b"\x00")
     spender = spender.rjust(32, b"\x00")
