@@ -218,7 +218,8 @@ def parse_allowance_slot(
     token: bytes, user: bytes, spender: bytes, traces: Iterable[dict]
 ) -> MappingSlot | None:
     """
-    detect the balance slot of token contract with a `allowance[user][spender]` trace result
+    detect the balance slot of token contract with a `allowance[user][spender]`
+    trace result
     """
     user = user.rjust(32, b"\x00")
     spender = spender.rjust(32, b"\x00")
