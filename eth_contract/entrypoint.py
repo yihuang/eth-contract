@@ -31,3 +31,9 @@ ENTRYPOINT07_SALT = HexBytes(
     "0x90d8084deab30c2a37c45e8d47f49f2f7965183cb6990a98943ef94940681de3"
 )
 ENTRYPOINT07_ADDRESS = to_checksum_address(ENTRYPOINT07_ARTIFACT["address"])
+WETH9_ARTIFACT = json.loads(
+    Path(__file__).parent.joinpath("deployments/WETH9.json").read_text()
+)
+MULTICALL3ROUTER_ARTIFACT = json.loads(
+    Path(__file__).parent.joinpath("deployments/Multicall3Router.json").read_text()
+)
