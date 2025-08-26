@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from eth_contract.entrypoint import WETH9_ARTIFACT
+from eth_contract.weth import WETH9_ARTIFACT
 from eth_contract.create2 import create2_address
 from eth_contract.utils import get_initcode
 
