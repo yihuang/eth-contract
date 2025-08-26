@@ -25,7 +25,7 @@ from eth_contract.utils import (
 from eth_contract.weth import WETH
 
 from .conftest import ETH_MAINNET_FORK, MULTICALL3ROUTER
-from .contracts import MULTICALL3ROUTER_ARTIFACT, WETH_ADDRESS, MockERC20_ARTIFACT
+from .contracts import WETH_ADDRESS, MockERC20_ARTIFACT, MULTICALL3ROUTER_ARTIFACT
 from .trace import trace_call
 
 
