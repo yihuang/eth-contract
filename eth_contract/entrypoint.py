@@ -34,6 +34,3 @@ ENTRYPOINT07_ADDRESS = to_checksum_address(ENTRYPOINT07_ARTIFACT["address"])
 WETH9_ARTIFACT = json.loads(
     Path(__file__).parent.joinpath("deployments/WETH9.json").read_text()
 )
-MULTICALL3ROUTER_ARTIFACT = json.loads(
-    Path(__file__).parent.joinpath("deployments/Multicall3Router.json").read_text()
-)

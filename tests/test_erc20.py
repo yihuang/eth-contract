@@ -9,7 +9,6 @@ from eth_contract.deploy_utils import (
     ensure_deployed_by_create2,
     ensure_deployed_by_create3,
 )
-from eth_contract.entrypoint import MULTICALL3ROUTER_ARTIFACT
 from eth_contract.erc20 import ERC20
 from eth_contract.multicall3 import (
     MULTICALL3,
@@ -26,7 +25,7 @@ from eth_contract.utils import (
 from eth_contract.weth import WETH
 
 from .conftest import ETH_MAINNET_FORK, MULTICALL3ROUTER
-from .contracts import WETH_ADDRESS, MockERC20_ARTIFACT
+from .contracts import WETH_ADDRESS, MockERC20_ARTIFACT, MULTICALL3ROUTER_ARTIFACT
 from .trace import trace_call
 
 

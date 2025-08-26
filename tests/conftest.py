@@ -23,13 +23,13 @@ from eth_contract.entrypoint import (
     ENTRYPOINT08_ADDRESS,
     ENTRYPOINT08_ARTIFACT,
     ENTRYPOINT08_SALT,
-    MULTICALL3ROUTER_ARTIFACT,
     WETH9_ARTIFACT,
 )
 from eth_contract.multicall3 import MULTICALL3_ADDRESS
 from eth_contract.utils import get_initcode
 
 from .contracts import (
+    MULTICALL3ROUTER_ARTIFACT,
     WETH_ADDRESS,
     WETH_SALT,
 )
