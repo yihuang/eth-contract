@@ -78,3 +78,46 @@ async def test_human_readable_function(fork_w3):
             {"type": "address"},
             {"type": "uint256"},
         ]
+
+
+@pytest.mark.asyncio
+async def test_output_tuple_list():
+    res = dehumanize(
+        "validators(string,(bytes,uint64,uint64,bool,bool))((string,string,bool,uint8,uint256,uint256,string,int64,int64,uint256,uint256)[],(bytes,uint64))"  # noqa: E501
+    )
+    assert res == {
+        "type": "function",
+        "name": "validators",
+        "inputs": [
+            {"type": "string"},
+            {
+                "type": "tuple",
+                "components": [
+                    {"type": "bytes"},
+                    {"type": "uint64"},
+                    {"type": "uint64"},
+                    {"type": "bool"},
+                    {"type": "bool"},
+                ],
+            },
+        ],
+        "outputs": [
+            {
+                "type": "tuple[]",
+                "components": [
+                    {"type": "string"},
+                    {"type": "string"},
+                    {"type": "bool"},
+                    {"type": "uint8"},
+                    {"type": "uint256"},
+                    {"type": "uint256"},
+                    {"type": "string"},
+                    {"type": "int64"},
+                    {"type": "int64"},
+                    {"type": "uint256"},
+                    {"type": "uint256"},
+                ],
+            },
+            {"type": "tuple", "components": [{"type": "bytes"}, {"type": "uint64"}]},
+        ],
+    }
