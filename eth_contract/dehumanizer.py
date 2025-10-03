@@ -2,6 +2,7 @@
 parse human-readable abi definition into json format
 """
 
+from typing import Any
 from eth_typing import ABIComponent, ABIComponentIndexed, ABIElement
 
 
@@ -50,29 +51,72 @@ def _split_str(groups, depth):
     g.append("")
 
 
-def parse_parentheses(s):
-    groups = []
-    depth = 0
-
-    try:
-        for char in s:
-            if char == "(":
-                _open(groups, depth)
-                depth += 1
-            elif char == ")":
-                _close(groups, depth)
-                depth -= 1
-            elif char == ",":
-                _split_str(groups, depth)
+def parse_parentheses(s: str) -> list:
+    s = s.strip()
+    result: list[Any] = []
+    i = 0
+    # extract function name
+    paren_pos = s.find('(')
+    if paren_pos == -1:
+        return [s]
+    name = s[:paren_pos].strip()
+    result.append(name)
+    i = paren_pos
+    while i < len(s):
+        if s[i] == '(':
+            # find matching closing parenthesis
+            paren_count = 1
+            j = i + 1
+            while j < len(s) and paren_count > 0:
+                if s[j] == '(':
+                    paren_count += 1
+                elif s[j] == ')':
+                    paren_count -= 1
+                j += 1
+            # extract content between parentheses
+            inner = s[i+1:j-1]
+            # check for array notation after parentheses
+            array_suffix = ""
+            if j < len(s) and s[j] == '[':
+                k = j
+                while k < len(s) and s[k] != ']':
+                    k += 1
+                if k < len(s):
+                    array_suffix = s[j:k+1]
+                    j = k + 1
+            # parse inner content
+            if inner.strip():
+                inner_parts = parse_comma_separated(inner + array_suffix)
+                result.append(inner_parts)
             else:
-                _append_str(groups, depth, char)
-    except IndexError:
-        raise ValueError("Parentheses mismatch")
+                result.append([])
+            i = j
+        else:
+            i += 1
+    return result
 
-    if depth > 0:
-        raise ValueError("Parentheses mismatch")
 
-    return groups
+def parse_comma_separated(s: str) -> list:
+    s = s.strip()
+    if not s:
+        return []
+    parts = []
+    current = ""
+    paren_depth = 0
+    for char in s:
+        if char == ',' and paren_depth == 0:
+            if current.strip():
+                parts.append(current.strip())
+            current = ""
+        else:
+            if char == '(':
+                paren_depth += 1
+            elif char == ')':
+                paren_depth -= 1
+            current += char
+    if current.strip():
+        parts.append(current.strip())
+    return parts
 
 
 def parse_component(s) -> ABIComponent:
@@ -80,7 +124,27 @@ def parse_component(s) -> ABIComponent:
         # nested component
         return {"type": "tuple", "components": [parse_component(item) for item in s]}
     else:
-        return {"type": s}
+        s = s.strip()
+        if s.endswith('[]'):
+            base_type = s[:-2].strip()
+            if base_type.startswith('(') and base_type.endswith(')'):
+                inner = base_type[1:-1]
+                components = parse_comma_separated(inner)
+                return {
+                    "type": "tuple[]",
+                    "components": [parse_component(comp) for comp in components]
+                }
+            else:
+                return {"type": s}
+        elif s.startswith('(') and s.endswith(')'):
+            inner = s[1:-1]
+            components = parse_comma_separated(inner)
+            return {
+                "type": "tuple",
+                "components": [parse_component(comp) for comp in components]
+            }
+        else:
+            return {"type": s}
 
 
 def parse_indexed_component(s) -> ABIComponentIndexed:
