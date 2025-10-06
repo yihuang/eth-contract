@@ -12,7 +12,6 @@ This is an EVM contract abstraction library that provides decoupled contract int
 - **Multicall3**: Batch call utilities (`eth_contract/multicall3.py`)
 - **EntryPoint**: ERC-4337 entry point contracts (`eth_contract/entrypoint.py`)
 - **Deployment Utilities**: Pre-deployed contract management (`eth_contract/deploy_utils.py`)
-- **ABI Dehumanizer**: Utility for parsing ABI from human-readable format (`eth_contract/dehumanizer.py`)
 
 ## Development Commands
 
