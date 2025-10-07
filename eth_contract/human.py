@@ -130,9 +130,6 @@ def _resolve_struct_components(
     Recursively resolve struct references in parameter components.
     Detects circular references.
     """
-    if ancestors is None:
-        ancestors = set()
-
     components = []
     type_without_tuple_regex = re.compile(
         r"^(?P<type>[a-zA-Z$_][a-zA-Z0-9$_]*)(?P<array>(?:\[\d*?\])+?)?$"
