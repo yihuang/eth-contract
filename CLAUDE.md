@@ -12,7 +12,7 @@ This is an EVM contract abstraction library that provides decoupled contract int
 - **Multicall3**: Batch call utilities (`eth_contract/multicall3.py`)
 - **EntryPoint**: ERC-4337 entry point contracts (`eth_contract/entrypoint.py`)
 - **Deployment Utilities**: Pre-deployed contract management (`eth_contract/deploy_utils.py`)
-- **ABI Dehumanizer**: Utility for parsing ABI from human-readable format (`eth_contract/dehumanizer.py`)
+- **Human Readable ABI**: Human-readable ABI parsing utilities (`eth_contract/human.py`)
 
 ## Development Commands
 
@@ -46,6 +46,7 @@ python -m build   # Build package
 - **Async-first**: All operations use async/await patterns
 - **Provider-agnostic**: Contracts are decoupled from Web3 instances
 - **ABI utilities**: Built-in support for common contract ABIs (ERC20, CREATE2, Multicall3, WETH)
+- **Human-readable ABI**: Support for parsing human-readable Solidity signatures into JSON ABI format
 - **Deployment helpers**: Utilities for deploying contracts via CREATE2/CREATE3 factories
 
 ## Testing Environment
@@ -72,5 +73,6 @@ Test fixtures are defined in `tests/conftest.py` and provide:
 
 - `eth_contract/contract.py`: Core contract abstraction
 - `eth_contract/utils.py`: Utility functions and transaction helpers
+- `eth_contract/human.py`: Human-readable ABI parsing utilities
 - `tests/conftest.py`: Test configuration and fixtures
 - `pyproject.toml`: Project configuration and dependencies

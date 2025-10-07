@@ -39,7 +39,7 @@ from web3.utils.abi import (
     check_if_arguments_can_be_encoded,
 )
 
-from .dehumanizer import dehumanize
+from .human import parse_abi, parse_function_signature
 from .utils import send_transaction
 
 
@@ -67,7 +67,7 @@ class ContractFunction:
     @classmethod
     def from_abi(cls, i: ABIFunction | str) -> ContractFunction:
         if isinstance(i, str):
-            abi = dehumanize(i)
+            abi = parse_function_signature(i)
             assert abi["type"] == "function"
         else:
             abi = i
@@ -257,6 +257,40 @@ class Contract:
         Bind contract to different transaction parameters.
         """
         return Contract(self.abi, tx=merge(self.tx, tx))
+
+    @classmethod
+    def from_abi(
+        cls, abi_or_signatures: ABI | list[str], **kwargs: Unpack[TxParams]
+    ) -> Contract:
+        """
+        Create a Contract instance from ABI or human-readable signatures.
+
+        Args:
+            abi_or_signatures: Either a parsed ABI or list of human-readable signatures
+            **kwargs: Optional transaction parameters
+
+        Returns:
+            Contract instance with parsed ABI
+
+        Example:
+            >>> # From human-readable signatures
+            >>> contract = Contract.from_abi([
+            ...     'function transfer(address to, uint256 amount) external',
+            ...     'event Transfer(address indexed from, address indexed to, '
+            ...     'uint256 amount)'
+            ... ])
+            >>>
+            >>> # From parsed ABI
+            >>> contract = Contract.from_abi([
+            ...     {"type": "function", "name": "transfer", "inputs": [...]}
+            ... ])
+        """
+        assert isinstance(abi_or_signatures, list)
+        if isinstance(abi_or_signatures[0], str):
+            abi = parse_abi(abi_or_signatures)
+        else:
+            abi = abi_or_signatures  # type: ignore
+        return cls(abi=abi, tx=kwargs)
 
 
 if __name__ == "__main__":
