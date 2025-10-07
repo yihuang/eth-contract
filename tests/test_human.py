@@ -439,7 +439,8 @@ class TestParseEventSignature:
             ),
             # Event with indexed parameters
             (
-                "event Transfer(address indexed from, address indexed to, uint256 value)",
+                "event Transfer(address indexed from, address indexed to, "
+                "uint256 value)",
                 {
                     "type": "event",
                     "name": "Transfer",
@@ -844,7 +845,8 @@ class TestParseSignature:
             ),
             # Event signature
             (
-                "event Transfer(address indexed from, address indexed to, uint256 value)",
+                "event Transfer(address indexed from, address indexed to, "
+                "uint256 value)",
                 {
                     "type": "event",
                     "name": "Transfer",
@@ -1180,7 +1182,10 @@ class TestParseStructs:
             ),
             # Struct with various types
             (
-                ["struct User { string name; address addr; uint256 balance; bool active; }"],
+                [
+                    "struct User { string name; address addr; uint256 balance; "
+                    "bool active; }"
+                ],
                 {
                     "User": [
                         {"type": "string", "name": "name"},
@@ -1307,7 +1312,8 @@ class TestParseABI:
             (
                 [
                     "function transfer(address to, uint256 amount)",
-                    "event Transfer(address indexed from, address indexed to, uint256 value)",
+                    "event Transfer(address indexed from, address indexed to, "
+                    "uint256 value)",
                     "error InsufficientBalance(uint256 available, uint256 required)",
                 ],
                 3,
@@ -1318,7 +1324,8 @@ class TestParseABI:
                 [
                     "struct User { string name; address addr; }",
                     "function transfer(address to, uint256 amount)",
-                    "event Transfer(address indexed from, address indexed to, uint256 value)",
+                    "event Transfer(address indexed from, address indexed to, "
+                    "uint256 value)",
                     "error InsufficientBalance(uint256 available, uint256 required)",
                     "constructor(string name, string symbol)",
                     "fallback() external",
@@ -1513,7 +1520,9 @@ class TestEdgeCases:
             ("((uint256,address),(bool,string))", "tuple", None),
         ],
     )
-    def test_edge_case_parameter_parsing(self, parameter_str, expected_type, expected_name):
+    def test_edge_case_parameter_parsing(
+        self, parameter_str, expected_type, expected_name
+    ):
         """Test edge case parameter parsing."""
         result = parse_abi_parameter(parameter_str)
         assert result["type"] == expected_type
