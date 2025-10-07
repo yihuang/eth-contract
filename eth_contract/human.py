@@ -14,7 +14,7 @@ from eth_typing import (
 )
 
 IDENTIFIER = r"[a-zA-Z$_][a-zA-Z0-9$_]*"
-ARRAY = r"( \[ \d* \] )+"
+ARRAY = r"(\[\d*\])+"
 SIGNATURE_PREFIX = re.compile(r"^(function|event|error|constructor|fallback|receive)")
 
 # Signature regexes adapted from:
