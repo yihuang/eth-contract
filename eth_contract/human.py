@@ -98,7 +98,6 @@ $""",
 )
 
 DYNAMIC_INTEGER_REGEX = re.compile(r"^u?int$")
-IS_TUPLE_REGEX = re.compile(r"^\(.+?\).*?$")
 
 TYPE_WITHOUT_TUPLE_REGEX = re.compile(
     rf"""^
