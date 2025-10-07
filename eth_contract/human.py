@@ -13,59 +13,135 @@ from eth_typing import (
     ABIReceive,
 )
 
+IDENTIFIER = r"[a-zA-Z$_][a-zA-Z0-9$_]*"
+ARRAY = r"(\[\d*\])+"
+SIGNATURE_PREFIX = re.compile(r"^(function|event|error|constructor|fallback|receive)")
+
 # Signature regexes adapted from:
 # https://github.com/wevm/abitype/tree/main/packages/abitype/src/human-readable
 ERROR_SIGNATURE_REGEX = re.compile(
-    r"^error (?P<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?P<parameters>.*?)\)$"
+    rf"""^error\s+      # 'error' keyword
+(?P<name>{IDENTIFIER})  # name
+\(
+  (?P<parameters>.*?)   # inputs
+\)
+$""",
+    re.VERBOSE,
 )
 
 EVENT_SIGNATURE_REGEX = re.compile(
-    r"^event (?P<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?P<parameters>.*?)\)$"
+    rf"""^event\s+      # 'event' keyword
+(?P<name>{IDENTIFIER})  # name
+\(
+    (?P<parameters>.*?) # inputs
+\)
+$""",
+    re.VERBOSE,
 )
 
 FUNCTION_SIGNATURE_REGEX = re.compile(
-    r"^function (?P<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?P<parameters>.*?)\)"
-    r"(?: (?P<scope>external|public))?"
-    r"(?: (?P<stateMutability>pure|view|nonpayable|payable))?"
-    r"(?: returns\s?\((?P<returns>.*?)\))?$"
+    rf"""^function\s+   # 'function' keyword
+(?P<name>{IDENTIFIER})  # name
+\(
+  (?P<parameters>.*?)   # inputs
+\)
+(\s* (?P<scope>external|public) )?
+(\s+ (?P<stateMutability>pure|view|nonpayable|payable) )?
+(\s+ returns \s* \(
+    (?P<returns>.*?)    # outputs
+\) )?
+$""",
+    re.VERBOSE,
 )
 
 CONSTRUCTOR_SIGNATURE_REGEX = re.compile(
-    r"^constructor\((?P<parameters>.*?)\)(?:\s(?P<stateMutability>payable))?$"
+    r"""^constructor    # 'constructor' keyword
+\(
+    (?P<parameters>.*?) # inputs
+\)
+(\s*
+    (?P<stateMutability>payable)
+)?
+$""",
+    re.VERBOSE,
 )
 
 FALLBACK_SIGNATURE_REGEX = re.compile(
-    r"^fallback\(\) external(?:\s(?P<stateMutability>payable))?$"
+    r"""^fallback \(\) \s+ external
+(\s+
+    (?P<stateMutability>payable)
+)?
+$""",
+    re.VERBOSE,
 )
 
-RECEIVE_SIGNATURE_REGEX = re.compile(r"^receive\(\) external payable$")
+RECEIVE_SIGNATURE_REGEX = re.compile(r"^receive\(\)\s+external\s+payable$")
 
 # Parameter regexes
 ABI_PARAMETER_WITHOUT_TUPLE_REGEX = re.compile(
-    r"^(?P<type>[a-zA-Z$_][a-zA-Z0-9$_]*(?:\spayable)?)"
-    r"(?P<array>(?:\[\d*?\])+?)?"
-    r"(?:\s(?P<modifier>calldata|indexed|memory|storage))?"
-    r"(?:\s(?P<name>[a-zA-Z$_][a-zA-Z0-9$_]*))?$"
+    rf"""^
+(?P<type>{IDENTIFIER} (\s+payable)?)
+(?P<array>{ARRAY})?
+(\s+ (?P<modifier>calldata|indexed|memory|storage) )?
+(\s+ (?P<name>{IDENTIFIER}) )?
+$""",
+    re.VERBOSE,
 )
-
 ABI_PARAMETER_WITH_TUPLE_REGEX = re.compile(
-    r"^\((?P<type>.+?)\)"
-    r"(?P<array>(?:\[\d*?\])+?)?"
-    r"(?:\s(?P<modifier>calldata|indexed|memory|storage))?"
-    r"(?:\s(?P<name>[a-zA-Z$_][a-zA-Z0-9$_]*))?$"
+    rf"""^
+\( (?P<type>.+?) \)
+(?P<array>{ARRAY})?
+(\s+ (?P<modifier>calldata|indexed|memory|storage) )?
+(\s+ (?P<name>{IDENTIFIER}) )?
+$""",
+    re.VERBOSE,
 )
 
 DYNAMIC_INTEGER_REGEX = re.compile(r"^u?int$")
-IS_TUPLE_REGEX = re.compile(r"^\(.+?\).*?$")
 
 TYPE_WITHOUT_TUPLE_REGEX = re.compile(
-    r"^(?P<type>[a-zA-Z$_][a-zA-Z0-9$_]*)(?P<array>(?:\[\d*?\])+?)?$"
+    rf"""^
+(?P<type>{IDENTIFIER})
+(?P<array>{ARRAY})?
+$""",
+    re.VERBOSE,
 )
 
-INTEGER_REGEX = re.compile(
-    r"^u?int(8|16|24|32|40|48|56|64|72|80|88|96|104|112|120|128|136|144|152|160|168"
-    r"|176|184|192|200|208|216|224|232|240|248|256)$"
-)
+INTEGER_SIZES = [
+    8,
+    16,
+    24,
+    32,
+    40,
+    48,
+    56,
+    64,
+    72,
+    80,
+    88,
+    96,
+    104,
+    112,
+    120,
+    128,
+    136,
+    144,
+    152,
+    160,
+    168,
+    176,
+    184,
+    192,
+    200,
+    208,
+    216,
+    224,
+    232,
+    240,
+    248,
+    256,
+]
+INTEGER_REGEX = re.compile(rf"^u?int({'|'.join(map(str, INTEGER_SIZES))})$")
 BYTES_REGEX = re.compile(r"^bytes([1-9]|[12][0-9]|3[0-2])$")
 
 # Modifier sets
@@ -78,7 +154,13 @@ parameter_cache: dict[str, ABIComponentIndexed] = {}
 
 # struct signature regex
 STRUCT_SIGNATURE_REGEX = re.compile(
-    r"^struct (?P<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\s*\{\s*(?P<properties>.*)\s*\}$"
+    rf"""^struct\s+
+(?P<name>{IDENTIFIER})\s*
+\{{\s*
+  (?P<properties>.*)
+\s*\}}
+$""",
+    re.VERBOSE,
 )
 
 
@@ -200,41 +282,57 @@ def is_solidity_type(type_name: str) -> bool:
     return False
 
 
-def split_parameters(
-    params: str, result: list[str] | None = None, current: str = "", depth: int = 0
-) -> list[str]:
-    """Recursively split comma-separated parameters respecting parentheses."""
-    if result is None:
-        result = []
+def split_parameters(params: str) -> list[str]:
+    """Split comma-separated parameters respecting parentheses."""
+    params = params.strip()
+    if not params:
+        return []
 
-    # Trim only at the start, not on every recursion
-    length = len(params.strip())
+    # tracking indices for current parameter
+    current_begin = 0
+    current_end = 0
 
-    # Base case: end of string
-    for i in range(length):
-        char = params[i]
-        tail = params[i + 1 :]
+    # tracking parenthesis depth
+    depth = 0
 
-        if char == ",":
-            if depth == 0:
-                return split_parameters(tail, [*result, current.strip()], "", depth)
-            else:
-                return split_parameters(tail, result, f"{current}{char}", depth)
-        elif char == "(":
-            return split_parameters(tail, result, f"{current}{char}", depth + 1)
-        elif char == ")":
-            return split_parameters(tail, result, f"{current}{char}", depth - 1)
+    # split result
+    result = []
+
+    for i, char in enumerate(params):
+        if char == "," and depth == 0:
+            # Split at comma when not inside parentheses
+            param_str = params[current_begin:current_end].strip()
+            if param_str:
+                result.append(param_str)
+            current_begin = current_end = i + 1
         else:
-            return split_parameters(tail, result, f"{current}{char}", depth)
+            current_end += 1
 
-    # End of iteration
-    if current == "":
-        return result
+            if char == "(":
+                # Enter parentheses
+                depth += 1
+            elif char == ")":
+                # Exit parentheses
+                depth -= 1
+                if depth < 0:
+                    raise ValueError(
+                        f"Invalid parenthesis: extra closing at position {i}"
+                    )
+
+    # Handle the last parameter
+    param_str = params[current_begin:current_end].strip()
+    if param_str:
+        result.append(param_str)
+
+    # Validate parentheses balance
     if depth != 0:
-        raise ValueError(f"Invalid parenthesis: depth={depth}, current={current}")
+        raise ValueError(f"Invalid parenthesis: unbalanced parentheses, depth={depth}")
 
-    result.append(current.strip())
     return result
+
+
+def is_tuple(s):
+    return s and s[0] == "(" and ")" in s
 
 
 def parse_abi_parameter(
@@ -252,10 +350,10 @@ def parse_abi_parameter(
     if cache_key in parameter_cache:
         return parameter_cache[cache_key]
 
-    is_tuple = IS_TUPLE_REGEX.match(param) is not None
+    tuple_param = is_tuple(param)
     regex = (
         ABI_PARAMETER_WITH_TUPLE_REGEX
-        if is_tuple
+        if tuple_param
         else ABI_PARAMETER_WITHOUT_TUPLE_REGEX
     )
     match = regex.match(param)
@@ -278,7 +376,7 @@ def parse_abi_parameter(
         result["indexed"] = True
 
     # Determine type
-    if is_tuple:
+    if tuple_param:
         result["type"] = "tuple"
         params = split_parameters(groups["type"])
         result["components"] = [parse_abi_parameter(p, structs=structs) for p in params]
@@ -431,25 +529,25 @@ def parse_signature(
     if structs is None:
         structs = {}
 
-    if FUNCTION_SIGNATURE_REGEX.match(signature):
+    match = SIGNATURE_PREFIX.match(signature)
+    if not match:
+        raise ValueError(f"Unknown signature type: {signature}")
+
+    prefix = match.group()
+    if prefix == "function":
         return parse_function_signature(signature, structs)
-
-    if EVENT_SIGNATURE_REGEX.match(signature):
+    elif prefix == "event":
         return parse_event_signature(signature, structs)
-
-    if ERROR_SIGNATURE_REGEX.match(signature):
+    elif prefix == "error":
         return parse_error_signature(signature, structs)
-
-    if CONSTRUCTOR_SIGNATURE_REGEX.match(signature):
+    elif prefix == "constructor":
         return parse_constructor_signature(signature, structs)
-
-    if FALLBACK_SIGNATURE_REGEX.match(signature):
+    elif prefix == "fallback":
         return parse_fallback_signature(signature)
-
-    if RECEIVE_SIGNATURE_REGEX.match(signature):
+    elif prefix == "receive":
         return parse_receive_signature(signature)
-
-    raise ValueError(f"Unknown signature type: {signature}")
+    else:
+        raise ValueError(f"Unknown signature type: {prefix}")
 
 
 def parse_abi(signatures: list[str]) -> ABI:

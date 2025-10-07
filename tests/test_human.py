@@ -429,7 +429,7 @@ class TestParseFunctionSignature:
         """Test function with invalid state mutability raises error."""
         # This fails because "invalid" is not a valid state mutability
         # and breaks the parsing
-        with pytest.raises(ValueError, match="Invalid parameter"):
+        with pytest.raises(ValueError, match="Invalid parenthesis"):
             parse_function_signature("function test() invalid returns (uint256)")
 
 
