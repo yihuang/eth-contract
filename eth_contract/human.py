@@ -318,7 +318,8 @@ def parse_function_signature(
     return {
         "type": "function",
         "name": groups["name"],
-        "stateMutability": groups.get("stateMutability") or "nonpayable",
+        "stateMutability": groups.get("stateMutability")  # type: ignore
+        or "nonpayable",
         "inputs": [
             parse_abi_parameter(p, FUNCTION_MODIFIERS, structs, "function")
             for p in params
@@ -387,7 +388,8 @@ def parse_constructor_signature(
 
     return {
         "type": "constructor",
-        "stateMutability": groups.get("stateMutability") or "nonpayable",
+        "stateMutability": groups.get("stateMutability")  # type: ignore
+        or "nonpayable",
         "inputs": [
             parse_abi_parameter(p, structs=structs, abi_type="constructor")
             for p in params
@@ -405,7 +407,8 @@ def parse_fallback_signature(signature: str) -> ABIFallback:
 
     return {
         "type": "fallback",
-        "stateMutability": groups.get("stateMutability") or "nonpayable",
+        "stateMutability": groups.get("stateMutability")  # type: ignore
+        or "nonpayable",
     }
 
 
