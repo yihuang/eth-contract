@@ -282,40 +282,52 @@ def is_solidity_type(type_name: str) -> bool:
     return False
 
 
-def split_parameters(
-    params: str, result: list[str] | None = None, current: str = "", depth: int = 0
-) -> list[str]:
-    """Recursively split comma-separated parameters respecting parentheses."""
-    if result is None:
-        result = []
+def split_parameters(params: str) -> list[str]:
+    """Split comma-separated parameters respecting parentheses."""
+    params = params.strip()
+    if not params:
+        return []
 
-    # Trim only at the start, not on every recursion
-    length = len(params.strip())
+    # tracking indices for current parameter
+    current_begin = 0
+    current_end = 0
 
-    # Base case: end of string
-    for i in range(length):
-        char = params[i]
-        tail = params[i + 1 :]
+    # tracking parenthesis depth
+    depth = 0
 
-        if char == ",":
-            if depth == 0:
-                return split_parameters(tail, [*result, current.strip()], "", depth)
-            else:
-                return split_parameters(tail, result, f"{current}{char}", depth)
-        elif char == "(":
-            return split_parameters(tail, result, f"{current}{char}", depth + 1)
-        elif char == ")":
-            return split_parameters(tail, result, f"{current}{char}", depth - 1)
+    # split result
+    result = []
+
+    for i, char in enumerate(params):
+        if char == "," and depth == 0:
+            # Split at comma when not inside parentheses
+            param_str = params[current_begin:current_end].strip()
+            if param_str:
+                result.append(param_str)
+            current_begin = current_end = i + 1
         else:
-            return split_parameters(tail, result, f"{current}{char}", depth)
+            current_end += 1
 
-    # End of iteration
-    if current == "":
-        return result
+            if char == "(":
+                # Enter parentheses
+                depth += 1
+            elif char == ")":
+                # Exit parentheses
+                depth -= 1
+                if depth < 0:
+                    raise ValueError(
+                        f"Invalid parenthesis: extra closing at position {i}"
+                    )
+
+    # Handle the last parameter
+    param_str = params[current_begin:current_end].strip()
+    if param_str:
+        result.append(param_str)
+
+    # Validate parentheses balance
     if depth != 0:
-        raise ValueError(f"Invalid parenthesis: depth={depth}, current={current}")
+        raise ValueError(f"Invalid parenthesis: unbalanced parentheses, depth={depth}")
 
-    result.append(current.strip())
     return result
 
 
