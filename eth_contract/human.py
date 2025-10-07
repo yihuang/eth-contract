@@ -13,53 +13,99 @@ from eth_typing import (
     ABIReceive,
 )
 
+IDENTIFIER = r"[a-zA-Z$_][a-zA-Z0-9$_]*"
+ARRAY = r"( \[ \d* \] )+"
+SIGNATURE_PREFIX = re.compile(r"^(function|event|error|constructor|fallback|receive)")
+
 # Signature regexes adapted from:
 # https://github.com/wevm/abitype/tree/main/packages/abitype/src/human-readable
 ERROR_SIGNATURE_REGEX = re.compile(
-    r"^error (?P<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?P<parameters>.*?)\)$"
+    rf"""^error\s+      # 'error' keyword
+(?P<name>{IDENTIFIER})  # name
+\(
+  (?P<parameters>.*?)   # inputs
+\)
+$""",
+    re.VERBOSE,
 )
 
 EVENT_SIGNATURE_REGEX = re.compile(
-    r"^event (?P<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?P<parameters>.*?)\)$"
+    rf"""^event\s+      # 'event' keyword
+(?P<name>{IDENTIFIER})  # name
+\(
+    (?P<parameters>.*?) # inputs
+\)
+$""",
+    re.VERBOSE,
 )
 
 FUNCTION_SIGNATURE_REGEX = re.compile(
-    r"^function (?P<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?P<parameters>.*?)\)"
-    r"(?: (?P<scope>external|public))?"
-    r"(?: (?P<stateMutability>pure|view|nonpayable|payable))?"
-    r"(?: returns\s?\((?P<returns>.*?)\))?$"
+    rf"""^function\s+   # 'function' keyword
+(?P<name>{IDENTIFIER})  # name
+\(
+  (?P<parameters>.*?)   # inputs
+\)
+(\s* (?P<scope>external|public) )?
+(\s+ (?P<stateMutability>pure|view|nonpayable|payable) )?
+(\s+ returns \s* \(
+    (?P<returns>.*?)    # outputs
+\) )?
+$""",
+    re.VERBOSE,
 )
 
 CONSTRUCTOR_SIGNATURE_REGEX = re.compile(
-    r"^constructor\((?P<parameters>.*?)\)(?:\s(?P<stateMutability>payable))?$"
+    r"""^constructor    # 'constructor' keyword
+\(
+    (?P<parameters>.*?) # inputs
+\)
+(\s*
+    (?P<stateMutability>payable)
+)?
+$""",
+    re.VERBOSE,
 )
 
 FALLBACK_SIGNATURE_REGEX = re.compile(
-    r"^fallback\(\) external(?:\s(?P<stateMutability>payable))?$"
+    r"""^fallback \(\) \s+ external
+(\s+
+    (?P<stateMutability>payable)
+)?
+$""",
+    re.VERBOSE,
 )
 
-RECEIVE_SIGNATURE_REGEX = re.compile(r"^receive\(\) external payable$")
+RECEIVE_SIGNATURE_REGEX = re.compile(r"^receive\(\)\s+external\s+payable$")
 
 # Parameter regexes
 ABI_PARAMETER_WITHOUT_TUPLE_REGEX = re.compile(
-    r"^(?P<type>[a-zA-Z$_][a-zA-Z0-9$_]*(?:\spayable)?)"
-    r"(?P<array>(?:\[\d*?\])+?)?"
-    r"(?:\s(?P<modifier>calldata|indexed|memory|storage))?"
-    r"(?:\s(?P<name>[a-zA-Z$_][a-zA-Z0-9$_]*))?$"
+    rf"""^
+(?P<type>{IDENTIFIER} (\s+payable)?)
+(?P<array>{ARRAY})?
+(\s+ (?P<modifier>calldata|indexed|memory|storage) )?
+(\s+ (?P<name>{IDENTIFIER}) )?
+$""",
+    re.VERBOSE,
 )
-
 ABI_PARAMETER_WITH_TUPLE_REGEX = re.compile(
-    r"^\((?P<type>.+?)\)"
-    r"(?P<array>(?:\[\d*?\])+?)?"
-    r"(?:\s(?P<modifier>calldata|indexed|memory|storage))?"
-    r"(?:\s(?P<name>[a-zA-Z$_][a-zA-Z0-9$_]*))?$"
+    rf"""^
+\( (?P<type>.+?) \)
+(?P<array>{ARRAY})?
+(\s+ (?P<modifier>calldata|indexed|memory|storage) )?
+(\s+ (?P<name>{IDENTIFIER}) )?
+$""",
+    re.VERBOSE,
 )
 
 DYNAMIC_INTEGER_REGEX = re.compile(r"^u?int$")
 IS_TUPLE_REGEX = re.compile(r"^\(.+?\).*?$")
 
 TYPE_WITHOUT_TUPLE_REGEX = re.compile(
-    r"^(?P<type>[a-zA-Z$_][a-zA-Z0-9$_]*)(?P<array>(?:\[\d*?\])+?)?$"
+    rf"""^
+(?P<type>{IDENTIFIER})
+(?P<array>{ARRAY})?
+$""",
+    re.VERBOSE,
 )
 
 INTEGER_REGEX = re.compile(
@@ -237,6 +283,10 @@ def split_parameters(
     return result
 
 
+def is_tuple(s):
+    return s and s[0] == "(" and ")" in s
+
+
 def parse_abi_parameter(
     param: str,
     modifiers: set[str] | None = None,
@@ -252,10 +302,10 @@ def parse_abi_parameter(
     if cache_key in parameter_cache:
         return parameter_cache[cache_key]
 
-    is_tuple = IS_TUPLE_REGEX.match(param) is not None
+    tuple_param = is_tuple(param)
     regex = (
         ABI_PARAMETER_WITH_TUPLE_REGEX
-        if is_tuple
+        if tuple_param
         else ABI_PARAMETER_WITHOUT_TUPLE_REGEX
     )
     match = regex.match(param)
@@ -278,7 +328,7 @@ def parse_abi_parameter(
         result["indexed"] = True
 
     # Determine type
-    if is_tuple:
+    if tuple_param:
         result["type"] = "tuple"
         params = split_parameters(groups["type"])
         result["components"] = [parse_abi_parameter(p, structs=structs) for p in params]
@@ -431,25 +481,25 @@ def parse_signature(
     if structs is None:
         structs = {}
 
-    if FUNCTION_SIGNATURE_REGEX.match(signature):
+    match = SIGNATURE_PREFIX.match(signature)
+    if not match:
+        raise ValueError(f"Unknown signature type: {signature}")
+
+    prefix = match.group()
+    if prefix == "function":
         return parse_function_signature(signature, structs)
-
-    if EVENT_SIGNATURE_REGEX.match(signature):
+    elif prefix == "event":
         return parse_event_signature(signature, structs)
-
-    if ERROR_SIGNATURE_REGEX.match(signature):
+    elif prefix == "error":
         return parse_error_signature(signature, structs)
-
-    if CONSTRUCTOR_SIGNATURE_REGEX.match(signature):
+    elif prefix == "constructor":
         return parse_constructor_signature(signature, structs)
-
-    if FALLBACK_SIGNATURE_REGEX.match(signature):
+    elif prefix == "fallback":
         return parse_fallback_signature(signature)
-
-    if RECEIVE_SIGNATURE_REGEX.match(signature):
+    elif prefix == "receive":
         return parse_receive_signature(signature)
-
-    raise ValueError(f"Unknown signature type: {signature}")
+    else:
+        raise ValueError(f"Unknown signature type: {prefix}")
 
 
 def parse_abi(signatures: list[str]) -> ABI:
