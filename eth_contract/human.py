@@ -90,12 +90,9 @@ def parse_structs(signatures: list[str]) -> dict[str, list[ABIComponentIndexed]]
     shallow_structs: dict[str, list[ABIComponentIndexed]] = {}
 
     for signature in signatures:
-        if not is_struct_signature(signature):
-            continue
-
         match = STRUCT_SIGNATURE_REGEX.match(signature)
         if not match:
-            raise ValueError(f"Invalid struct signature: {signature}")
+            continue
 
         groups = match.groupdict()
         name = groups["name"]
