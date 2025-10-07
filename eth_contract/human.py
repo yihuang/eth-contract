@@ -57,6 +57,11 @@ ABI_PARAMETER_WITH_TUPLE_REGEX = re.compile(
 DYNAMIC_INTEGER_REGEX = re.compile(r"^u?int$")
 IS_TUPLE_REGEX = re.compile(r"^\(.+?\).*?$")
 
+TYPE_WITHOUT_TUPLE_REGEX = re.compile(
+    r"^(?P<type>[a-zA-Z$_][a-zA-Z0-9$_]*)(?P<array>(?:\[\d*?\])+?)?$"
+)
+
+
 # Modifier sets
 EVENT_MODIFIERS = {"indexed"}
 FUNCTION_MODIFIERS = {"calldata", "memory", "storage"}
@@ -131,10 +136,6 @@ def _resolve_struct_components(
     Detects circular references.
     """
     components = []
-    type_without_tuple_regex = re.compile(
-        r"^(?P<type>[a-zA-Z$_][a-zA-Z0-9$_]*)(?P<array>(?:\[\d*?\])+?)?$"
-    )
-
     for param in parameters:
         param_type = param["type"]
 
@@ -144,7 +145,7 @@ def _resolve_struct_components(
             continue
 
         # Try to match type and array suffix
-        match = type_without_tuple_regex.match(param_type)
+        match = TYPE_WITHOUT_TUPLE_REGEX.match(param_type)
         if not match:
             raise ValueError(f"Invalid ABI type parameter: {param}")
 
