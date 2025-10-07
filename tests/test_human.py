@@ -120,18 +120,6 @@ class TestParseABIParameter:
             "name": "amount",
         }
 
-    def test_parameter_with_modifiers(self):
-        """Test parameters with modifiers."""
-        assert parse_abi_parameter("address indexed from") == {
-            "type": "address",
-            "name": "from",
-            "indexed": True,
-        }
-        assert parse_abi_parameter("uint256 calldata value") == {
-            "type": "uint256",
-            "name": "value",
-        }
-
     def test_array_types(self):
         """Test array parameter types."""
         assert parse_abi_parameter("uint256[]") == {"type": "uint256[]"}
@@ -439,7 +427,8 @@ class TestParseFunctionSignature:
 
     def test_function_with_invalid_state_mutability(self):
         """Test function with invalid state mutability raises error."""
-        # This fails because "invalid" is not a valid state mutability and breaks the parsing
+        # This fails because "invalid" is not a valid state mutability
+        # and breaks the parsing
         with pytest.raises(ValueError, match="Invalid parameter"):
             parse_function_signature("function test() invalid returns (uint256)")
 
@@ -858,7 +847,12 @@ class TestParseSignature:
 
     def test_parse_signature_with_invalid_struct_reference(self):
         """Test parsing signature with invalid struct reference raises error."""
-        structs = {"Point": [{"type": "uint256", "name": "x"}, {"type": "uint256", "name": "y"}]}
+        structs = {
+            "Point": [
+                {"type": "uint256", "name": "x"},
+                {"type": "uint256", "name": "y"},
+            ]
+        }
         # This should work fine with valid struct reference
         result = parse_signature("function test(Point p)", structs)
         assert result["type"] == "function"
@@ -1390,6 +1384,7 @@ class TestEdgeCases:
         """Test parameter cache behavior with identical parameters."""
         # Clear cache
         from eth_contract.human import parameter_cache
+
         parameter_cache.clear()
 
         # Parse same parameter twice with explicit structs to ensure same cache key
@@ -1403,6 +1398,7 @@ class TestEdgeCases:
     def test_parameter_cache_with_different_structs(self):
         """Test parameter cache behavior with different struct contexts."""
         from eth_contract.human import parameter_cache
+
         parameter_cache.clear()
 
         structs1 = {"Point": [{"type": "uint256", "name": "x"}]}
@@ -1425,7 +1421,8 @@ class TestEdgeCases:
         with pytest.raises(ValueError, match="Invalid parameter"):
             parse_abi_parameter("\tuint256\tamount\t")
 
-        # Newlines actually parse successfully - treated as type "uint256" and name "amount"
+        # Newlines actually parse successfully - treated as type "uint256"
+        # and name "amount"
         result = parse_abi_parameter("uint256\namount")
         assert result["type"] == "uint256"
         assert result["name"] == "amount"

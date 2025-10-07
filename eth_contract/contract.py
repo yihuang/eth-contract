@@ -276,7 +276,8 @@ class Contract:
             >>> # From human-readable signatures
             >>> contract = Contract.from_abi([
             ...     'function transfer(address to, uint256 amount) external',
-            ...     'event Transfer(address indexed from, address indexed to, uint256 amount)'
+            ...     'event Transfer(address indexed from, address indexed to, '
+            ...     'uint256 amount)'
             ... ])
             >>>
             >>> # From parsed ABI

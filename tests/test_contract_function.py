@@ -1,7 +1,7 @@
 import pytest
+from eth_typing import ABIFunction
 
 from eth_contract.contract import ContractFunction
-from eth_typing import ABIFunction
 
 
 class TestContractFunctionFromABI:
@@ -24,9 +24,9 @@ class TestContractFunctionFromABI:
             "stateMutability": "nonpayable",
             "inputs": [
                 {"type": "address", "name": "to"},
-                {"type": "uint256", "name": "amount"}
+                {"type": "uint256", "name": "amount"},
             ],
-            "outputs": []
+            "outputs": [],
         }
 
         fn = ContractFunction.from_abi(abi_dict)
@@ -39,11 +39,11 @@ class TestContractFunctionFromABI:
         fn = ContractFunction.from_abi("function transfer(address,uint256)")
 
         # Test all expected properties are set
-        assert hasattr(fn, 'name')
-        assert hasattr(fn, 'selector')
-        assert hasattr(fn, 'signature')
-        assert hasattr(fn, 'input_types')
-        assert hasattr(fn, 'output_types')
+        assert hasattr(fn, "name")
+        assert hasattr(fn, "selector")
+        assert hasattr(fn, "signature")
+        assert hasattr(fn, "input_types")
+        assert hasattr(fn, "output_types")
 
         # Test specific values
         assert fn.name == "transfer"
@@ -89,7 +89,7 @@ class TestContractFunctionFromABI:
         with pytest.raises(ValueError, match="Invalid function signature"):
             ContractFunction.from_abi("event Transfer(address,uint256)")
 
-    def test_from_abi_equivalence_string_vs_dict(self):
+    def test_from_abi_equivalence_string_vs_dict(self) -> None:
         """Test that string and dict inputs produce equivalent ContractFunctions."""
         # Create from string
         fn_string = ContractFunction.from_abi("function transfer(address,uint256)")
@@ -99,11 +99,8 @@ class TestContractFunctionFromABI:
             "type": "function",
             "name": "transfer",
             "stateMutability": "nonpayable",
-            "inputs": [
-                {"type": "address"},
-                {"type": "uint256"}
-            ],
-            "outputs": []
+            "inputs": [{"type": "address"}, {"type": "uint256"}],
+            "outputs": [],
         }
         fn_dict = ContractFunction.from_abi(abi_dict)
 

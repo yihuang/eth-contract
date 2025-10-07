@@ -1,5 +1,5 @@
 import re
-from typing import Any, cast
+from typing import cast
 
 from eth_typing import (
     ABI,
@@ -13,7 +13,8 @@ from eth_typing import (
     ABIReceive,
 )
 
-# Signature regexes (adapted from https://github.com/wevm/abitype/tree/main/packages/abitype/src/human-readable)
+# Signature regexes adapted from:
+# https://github.com/wevm/abitype/tree/main/packages/abitype/src/human-readable
 ERROR_SIGNATURE_REGEX = re.compile(
     r"^error (?P<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?P<parameters>.*?)\)$"
 )
@@ -463,7 +464,8 @@ def parse_abi(signatures: list[str]) -> ABI:
         >>> abi = parse_abi([
         ...     'struct Foo { string name; uint256 value; }',
         ...     'function transfer(Foo foo) external',
-        ...     'event Transfer(address indexed from, address indexed to, uint256 amount)'
+        ...     'event Transfer(address indexed from, address indexed to, '
+        ...     'uint256 amount)'
         ... ])
     """
     if not signatures:
