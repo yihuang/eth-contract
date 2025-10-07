@@ -61,6 +61,11 @@ TYPE_WITHOUT_TUPLE_REGEX = re.compile(
     r"^(?P<type>[a-zA-Z$_][a-zA-Z0-9$_]*)(?P<array>(?:\[\d*?\])+?)?$"
 )
 
+INTEGER_REGEX = re.compile(
+    r"^u?int(8|16|24|32|40|48|56|64|72|80|88|96|104|112|120|128|136|144|152|160|168"
+    r"|176|184|192|200|208|216|224|232|240|248|256)$"
+)
+BYTES_REGEX = re.compile(r"^bytes([1-9]|[12][0-9]|3[0-2])$")
 
 # Modifier sets
 EVENT_MODIFIERS = {"indexed"}
@@ -184,14 +189,11 @@ def is_solidity_type(type_name: str) -> bool:
         return True
 
     # Fixed-size bytes (bytes1 to bytes32)
-    if re.match(r"^bytes([1-9]|[12][0-9]|3[0-2])$", type_name):
+    if BYTES_REGEX.match(type_name):
         return True
 
     # Integers (int8 to int256, uint8 to uint256, in steps of 8)
-    if re.match(
-        r"^u?int(8|16|24|32|40|48|56|64|72|80|88|96|104|112|120|128|136|144|152|160|168|176|184|192|200|208|216|224|232|240|248|256)$",
-        type_name,
-    ):
+    if INTEGER_REGEX.match(type_name):
         return True
 
     return False
