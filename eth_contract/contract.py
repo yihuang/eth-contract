@@ -39,7 +39,7 @@ from web3.utils.abi import (
     check_if_arguments_can_be_encoded,
 )
 
-from .human import parse_function_signature
+from .human import parse_abi, parse_function_signature
 from .utils import send_transaction
 
 
@@ -259,7 +259,9 @@ class Contract:
         return Contract(self.abi, tx=merge(self.tx, tx))
 
     @classmethod
-    def from_abi(cls, abi_or_signatures: ABI | list[str], **kwargs: Unpack[TxParams]) -> Contract:
+    def from_abi(
+        cls, abi_or_signatures: ABI | list[str], **kwargs: Unpack[TxParams]
+    ) -> Contract:
         """
         Create a Contract instance from ABI or human-readable signatures.
 
@@ -282,12 +284,12 @@ class Contract:
             ...     {"type": "function", "name": "transfer", "inputs": [...]}
             ... ])
         """
-        if isinstance(abi_or_signatures, list) and abi_or_signatures and isinstance(abi_or_signatures[0], str):
-            from .human import parse_abi
+        assert isinstance(abi_or_signatures, list)
+        if isinstance(abi_or_signatures[0], str):
             abi = parse_abi(abi_or_signatures)
         else:
-            abi = abi_or_signatures
-        return cls(abi, **kwargs)
+            abi = abi_or_signatures  # type: ignore
+        return cls(abi=abi, tx=kwargs)
 
 
 if __name__ == "__main__":
