@@ -27,785 +27,837 @@ from eth_contract.human import (
 
 
 class TestSplitParameters:
-    """Test parameter splitting functionality."""
+    """test parameter splitting functionality."""
 
-    def test_basic_parameters(self):
-        """Test splitting basic comma-separated parameters."""
-        assert split_parameters("address,uint256") == ["address", "uint256"]
-        assert split_parameters("address, uint256, bool") == [
-            "address",
-            "uint256",
-            "bool",
-        ]
+    @pytest.mark.parametrize(
+        "input_str, expected",
+        [
+            # basic parameters
+            ("address,uint256", ["address", "uint256"]),
+            ("address, uint256, bool", ["address", "uint256", "bool"]),
+            # parameters with various spacing
+            ("address , uint256 , bool", ["address", "uint256", "bool"]),
+            ("address,uint256,bool", ["address", "uint256", "bool"]),
+            # nested parentheses
+            ("(uint256,address),bool", ["(uint256,address)", "bool"]),
+            ("((uint256),address),bool", ["((uint256),address)", "bool"]),
+            # empty parameters
+            ("", []),
+            (" ", []),
+            # deeply nested parentheses
+            ("(((uint256)),address)", ["(((uint256)),address)"]),
+            # mixed parentheses and commas
+            (
+                "(uint256,address),bool,(string,bytes)",
+                ["(uint256,address)", "bool", "(string,bytes)"],
+            ),
+            # complex nested structures
+            (
+                "((uint256,(address,bool)),string)",
+                ["((uint256,(address,bool)),string)"],
+            ),
+        ],
+    )
+    def test_valid_parameter_splitting(self, input_str, expected):
+        """test valid parameter splitting cases."""
+        assert split_parameters(input_str) == expected
 
-    def test_parameters_with_spaces(self):
-        """Test parameters with various spacing."""
-        assert split_parameters("address , uint256 , bool") == [
-            "address",
-            "uint256",
-            "bool",
-        ]
-        assert split_parameters("address,uint256,bool") == [
-            "address",
-            "uint256",
-            "bool",
-        ]
-
-    def test_nested_parentheses(self):
-        """Test parameters with nested parentheses."""
-        assert split_parameters("(uint256,address),bool") == [
-            "(uint256,address)",
-            "bool",
-        ]
-        assert split_parameters("((uint256),address),bool") == [
-            "((uint256),address)",
-            "bool",
-        ]
-
-    def test_empty_parameters(self):
-        """Test empty parameter strings."""
-        assert split_parameters("") == []
-        assert split_parameters(" ") == []
-
-    def test_invalid_parentheses(self):
-        """Test invalid parentheses raise errors."""
-        with pytest.raises(ValueError, match="Invalid parenthesis"):
-            split_parameters("(uint256,address")
-        with pytest.raises(ValueError, match="Invalid parenthesis"):
-            split_parameters("uint256,address)")
-
-    def test_deeply_nested_parentheses(self):
-        """Test deeply nested parentheses."""
-        assert split_parameters("(((uint256)),address)") == ["(((uint256)),address)"]
-
-    def test_unbalanced_parentheses_extra_open(self):
-        """Test extra opening parentheses raise error."""
-        with pytest.raises(ValueError, match="Invalid parenthesis"):
-            split_parameters("((uint256,address)")
-
-    def test_unbalanced_parentheses_extra_close(self):
-        """Test extra closing parentheses raise error."""
-        with pytest.raises(ValueError, match="Invalid parenthesis"):
-            split_parameters("(uint256,address))")
-
-    def test_mixed_parentheses_with_commas(self):
-        """Test mixed parentheses and commas."""
-        assert split_parameters("(uint256,address),bool,(string,bytes)") == [
-            "(uint256,address)",
-            "bool",
-            "(string,bytes)",
-        ]
-
-    def test_complex_nested_structures(self):
-        """Test complex nested structures."""
-        assert split_parameters("((uint256,(address,bool)),string)") == [
-            "((uint256,(address,bool)),string)"
-        ]
+    @pytest.mark.parametrize(
+        "input_str, expected_error",
+        [
+            # invalid parentheses - extra open
+            ("(uint256,address", "Invalid parenthesis"),
+            # invalid parentheses - extra close
+            ("uint256,address)", "Invalid parenthesis"),
+            # unbalanced parentheses - extra open
+            ("((uint256,address)", "Invalid parenthesis"),
+            # unbalanced parentheses - extra close
+            ("(uint256,address))", "Invalid parenthesis"),
+        ],
+    )
+    def test_invalid_parameter_splitting(self, input_str, expected_error):
+        """test invalid parameter splitting cases that raise errors."""
+        with pytest.raises(ValueError, match=expected_error):
+            split_parameters(input_str)
 
 
 class TestParseABIParameter:
     """Test ABI parameter parsing."""
 
-    def test_basic_types(self):
-        """Test parsing basic parameter types."""
-        assert parse_abi_parameter("address") == {"type": "address"}
-        assert parse_abi_parameter("uint256") == {"type": "uint256"}
-        assert parse_abi_parameter("bool") == {"type": "bool"}
-
-    def test_parameter_with_name(self):
-        """Test parameters with names."""
-        assert parse_abi_parameter("address to") == {"type": "address", "name": "to"}
-        assert parse_abi_parameter("uint256 amount") == {
-            "type": "uint256",
-            "name": "amount",
-        }
-
-    def test_array_types(self):
-        """Test array parameter types."""
-        assert parse_abi_parameter("uint256[]") == {"type": "uint256[]"}
-        assert parse_abi_parameter("address[10]") == {"type": "address[10]"}
-        assert parse_abi_parameter("bool[][]") == {"type": "bool[][]"}
-
-    def test_tuple_types(self):
-        """Test tuple parameter types."""
-        result = parse_abi_parameter("(uint256,address)")
-        assert result == {
-            "type": "tuple",
-            "components": [{"type": "uint256"}, {"type": "address"}],
-        }
-
-    def test_dynamic_integers(self):
-        """Test dynamic integer types."""
-        assert parse_abi_parameter("uint") == {"type": "uint256"}
-        assert parse_abi_parameter("int") == {"type": "int256"}
-
-    def test_address_payable(self):
-        """Test address payable type."""
-        assert parse_abi_parameter("address payable") == {"type": "address"}
-
-    def test_invalid_parameter(self):
-        """Test invalid parameter structure raises error."""
-        # The current implementation doesn't validate types, so it accepts any string
-        # Test with malformed parameter structure instead
-        with pytest.raises(ValueError, match="Invalid parameter"):
-            parse_abi_parameter("invalid parameter structure with spaces")
-
-    def test_invalid_parameter_with_malformed_tuple(self):
-        """Test invalid tuple parameter structure raises error."""
-        with pytest.raises(ValueError, match="Invalid parameter"):
-            parse_abi_parameter("(uint256,address")  # Missing closing parenthesis
-
-    def test_invalid_parameter_with_extra_parentheses(self):
-        """Test parameter with unbalanced parentheses raises error."""
-        # This fails during parameter splitting due to unbalanced parentheses
-        with pytest.raises(ValueError, match="Invalid parenthesis"):
-            parse_abi_parameter("((uint256,address)")
-
-    def test_invalid_parameter_with_empty_tuple(self):
-        """Test empty tuple parameter raises error."""
-        with pytest.raises(ValueError, match="Invalid parameter"):
-            parse_abi_parameter("()")
-
-    def test_invalid_parameter_with_malformed_array(self):
-        """Test malformed array syntax raises error."""
-        with pytest.raises(ValueError, match="Invalid parameter"):
-            parse_abi_parameter("uint256[")  # Missing closing bracket
-
-    def test_invalid_parameter_with_invalid_modifier_placement(self):
-        """Test invalid modifier placement raises error."""
-        with pytest.raises(ValueError, match="Invalid parameter"):
-            parse_abi_parameter("indexed address from")  # Modifier before type
-
-    def test_all_solidity_types(self):
-        """Test parsing all Solidity ABI types with named parameters."""
-        # Basic types
-        assert parse_abi_parameter("bool isActive") == {
-            "type": "bool",
-            "name": "isActive",
-        }
-        assert parse_abi_parameter("address owner") == {
-            "type": "address",
-            "name": "owner",
-        }
-        assert parse_abi_parameter("string name") == {"type": "string", "name": "name"}
-        assert parse_abi_parameter("bytes data") == {"type": "bytes", "name": "data"}
-
-        # Integer types
-        assert parse_abi_parameter("uint8 decimals") == {
-            "type": "uint8",
-            "name": "decimals",
-        }
-        assert parse_abi_parameter("int256 balance") == {
-            "type": "int256",
-            "name": "balance",
-        }
-        assert parse_abi_parameter("uint total") == {"type": "uint256", "name": "total"}
-        assert parse_abi_parameter("int count") == {"type": "int256", "name": "count"}
-
-        # Fixed point types
-        assert parse_abi_parameter("ufixed128x18 price") == {
-            "type": "ufixed128x18",
-            "name": "price",
-        }
-        assert parse_abi_parameter("fixed256x80 rate") == {
-            "type": "fixed256x80",
-            "name": "rate",
-        }
-
-        # Bytes types
-        assert parse_abi_parameter("bytes1 flag") == {"type": "bytes1", "name": "flag"}
-        assert parse_abi_parameter("bytes32 hash") == {
-            "type": "bytes32",
-            "name": "hash",
-        }
-
-    def test_complex_array_types(self):
-        """Test complex array types with named parameters."""
-        # Single dimension arrays
-        assert parse_abi_parameter("uint256[] amounts") == {
-            "type": "uint256[]",
-            "name": "amounts",
-        }
-        assert parse_abi_parameter("address[10] recipients") == {
-            "type": "address[10]",
-            "name": "recipients",
-        }
-
-        # Multi-dimensional arrays
-        assert parse_abi_parameter("uint256[][] matrix") == {
-            "type": "uint256[][]",
-            "name": "matrix",
-        }
-        assert parse_abi_parameter("address[][5] lists") == {
-            "type": "address[][5]",
-            "name": "lists",
-        }
-
-        # Arrays with complex types
-        assert parse_abi_parameter("string[] names") == {
-            "type": "string[]",
-            "name": "names",
-        }
-        assert parse_abi_parameter("bytes32[] hashes") == {
-            "type": "bytes32[]",
-            "name": "hashes",
-        }
-
-    def test_nested_tuples(self):
-        """Test nested tuple types with named parameters."""
-        # Simple tuple
-        result = parse_abi_parameter("(uint256,address) pair")
-        assert result == {
-            "type": "tuple",
-            "name": "pair",
-            "components": [{"type": "uint256"}, {"type": "address"}],
-        }
-
-        # Nested tuple
-        result = parse_abi_parameter("((uint256,address),bool) complex")
-        assert result == {
-            "type": "tuple",
-            "name": "complex",
-            "components": [
+    @pytest.mark.parametrize(
+        "input_str, expected",
+        [
+            # Basic types
+            ("address", {"type": "address"}),
+            ("uint256", {"type": "uint256"}),
+            ("bool", {"type": "bool"}),
+            # Parameters with names
+            ("address to", {"type": "address", "name": "to"}),
+            ("uint256 amount", {"type": "uint256", "name": "amount"}),
+            # Array types
+            ("uint256[]", {"type": "uint256[]"}),
+            ("address[10]", {"type": "address[10]"}),
+            ("bool[][]", {"type": "bool[][]"}),
+            # Dynamic integers
+            ("uint", {"type": "uint256"}),
+            ("int", {"type": "int256"}),
+            # Address payable
+            ("address payable", {"type": "address"}),
+            # Tuple types
+            (
+                "(uint256,address)",
                 {
                     "type": "tuple",
                     "components": [{"type": "uint256"}, {"type": "address"}],
                 },
-                {"type": "bool"},
-            ],
-        }
-
-    def test_array_of_tuples(self):
-        """Test array of tuple types."""
-        # Array of simple tuples
-        result = parse_abi_parameter("(uint256,address)[] pairs")
-        assert result == {
-            "type": "tuple[]",
-            "name": "pairs",
-            "components": [{"type": "uint256"}, {"type": "address"}],
-        }
-
-        # Fixed-size array of tuples
-        result = parse_abi_parameter("(uint256,address)[10] fixedPairs")
-        assert result == {
-            "type": "tuple[10]",
-            "name": "fixedPairs",
-            "components": [{"type": "uint256"}, {"type": "address"}],
-        }
-
-        # Multi-dimensional array of tuples
-        result = parse_abi_parameter("(uint256,address)[][] nestedPairs")
-        assert result == {
-            "type": "tuple[][]",
-            "name": "nestedPairs",
-            "components": [{"type": "uint256"}, {"type": "address"}],
-        }
-
-        # Array of nested tuples
-        result = parse_abi_parameter("((uint256,address),bool)[] complexPairs")
-        assert result == {
-            "type": "tuple[]",
-            "name": "complexPairs",
-            "components": [
+            ),
+            # All Solidity types with named parameters
+            ("bool isActive", {"type": "bool", "name": "isActive"}),
+            ("address owner", {"type": "address", "name": "owner"}),
+            ("string name", {"type": "string", "name": "name"}),
+            ("bytes data", {"type": "bytes", "name": "data"}),
+            ("uint8 decimals", {"type": "uint8", "name": "decimals"}),
+            ("int256 balance", {"type": "int256", "name": "balance"}),
+            ("uint total", {"type": "uint256", "name": "total"}),
+            ("int count", {"type": "int256", "name": "count"}),
+            ("ufixed128x18 price", {"type": "ufixed128x18", "name": "price"}),
+            ("fixed256x80 rate", {"type": "fixed256x80", "name": "rate"}),
+            ("bytes1 flag", {"type": "bytes1", "name": "flag"}),
+            ("bytes32 hash", {"type": "bytes32", "name": "hash"}),
+            # Complex array types
+            ("uint256[] amounts", {"type": "uint256[]", "name": "amounts"}),
+            ("address[10] recipients", {"type": "address[10]", "name": "recipients"}),
+            ("uint256[][] matrix", {"type": "uint256[][]", "name": "matrix"}),
+            ("address[][5] lists", {"type": "address[][5]", "name": "lists"}),
+            ("string[] names", {"type": "string[]", "name": "names"}),
+            ("bytes32[] hashes", {"type": "bytes32[]", "name": "hashes"}),
+            # Nested tuples
+            (
+                "(uint256,address) pair",
                 {
                     "type": "tuple",
+                    "name": "pair",
                     "components": [{"type": "uint256"}, {"type": "address"}],
                 },
-                {"type": "bool"},
-            ],
-        }
+            ),
+            (
+                "((uint256,address),bool) complex",
+                {
+                    "type": "tuple",
+                    "name": "complex",
+                    "components": [
+                        {
+                            "type": "tuple",
+                            "components": [{"type": "uint256"}, {"type": "address"}],
+                        },
+                        {"type": "bool"},
+                    ],
+                },
+            ),
+            # Array of tuples
+            (
+                "(uint256,address)[] pairs",
+                {
+                    "type": "tuple[]",
+                    "name": "pairs",
+                    "components": [{"type": "uint256"}, {"type": "address"}],
+                },
+            ),
+            (
+                "(uint256,address)[10] fixedPairs",
+                {
+                    "type": "tuple[10]",
+                    "name": "fixedPairs",
+                    "components": [{"type": "uint256"}, {"type": "address"}],
+                },
+            ),
+            (
+                "(uint256,address)[][] nestedPairs",
+                {
+                    "type": "tuple[][]",
+                    "name": "nestedPairs",
+                    "components": [{"type": "uint256"}, {"type": "address"}],
+                },
+            ),
+            (
+                "((uint256,address),bool)[] complexPairs",
+                {
+                    "type": "tuple[]",
+                    "name": "complexPairs",
+                    "components": [
+                        {
+                            "type": "tuple",
+                            "components": [{"type": "uint256"}, {"type": "address"}],
+                        },
+                        {"type": "bool"},
+                    ],
+                },
+            ),
+        ],
+    )
+    def test_basic_parameter_parsing(self, input_str, expected):
+        """Test basic parameter parsing cases."""
+        assert parse_abi_parameter(input_str) == expected
 
-    def test_parameter_with_modifiers(self):
+    @pytest.mark.parametrize(
+        "input_str, modifiers, expected",
+        [
+            # Function modifiers
+            (
+                "uint256 calldata value",
+                FUNCTION_MODIFIERS,
+                {"type": "uint256", "name": "value"},
+            ),
+            (
+                "string memory data",
+                FUNCTION_MODIFIERS,
+                {"type": "string", "name": "data"},
+            ),
+            # Event modifiers
+            (
+                "address indexed from",
+                EVENT_MODIFIERS,
+                {"type": "address", "name": "from", "indexed": True},
+            ),
+        ],
+    )
+    def test_parameter_with_modifiers(self, input_str, modifiers, expected):
         """Test parameters with various modifiers."""
-        # Function modifiers
-        assert parse_abi_parameter("uint256 calldata value", FUNCTION_MODIFIERS) == {
-            "type": "uint256",
-            "name": "value",
-        }
-        assert parse_abi_parameter("string memory data", FUNCTION_MODIFIERS) == {
-            "type": "string",
-            "name": "data",
-        }
+        assert parse_abi_parameter(input_str, modifiers) == expected
 
-        # Event modifiers
-        assert parse_abi_parameter("address indexed from", EVENT_MODIFIERS) == {
-            "type": "address",
-            "name": "from",
-            "indexed": True,
-        }
-
-    def test_invalid_modifiers(self):
+    @pytest.mark.parametrize(
+        "input_str, modifiers, abi_type, expected_error",
+        [
+            # Invalid modifier for function
+            (
+                "uint256 indexed value",
+                FUNCTION_MODIFIERS,
+                "function",
+                "Invalid modifier 'indexed' for type function",
+            ),
+            # Invalid modifier for event
+            (
+                "string memory data",
+                EVENT_MODIFIERS,
+                "event",
+                "Invalid modifier 'memory' for type event",
+            ),
+        ],
+    )
+    def test_invalid_modifiers(self, input_str, modifiers, abi_type, expected_error):
         """Test invalid modifier usage raises errors."""
-        # Invalid modifier for function
-        with pytest.raises(
-            ValueError, match="Invalid modifier 'indexed' for type function"
-        ):
-            parse_abi_parameter(
-                "uint256 indexed value", FUNCTION_MODIFIERS, abi_type="function"
-            )
+        with pytest.raises(ValueError, match=expected_error):
+            parse_abi_parameter(input_str, modifiers, abi_type=abi_type)
 
-        # Invalid modifier for event
-        with pytest.raises(
-            ValueError, match="Invalid modifier 'memory' for type event"
-        ):
-            parse_abi_parameter("string memory data", EVENT_MODIFIERS, abi_type="event")
+    @pytest.mark.parametrize(
+        "input_str, expected_error",
+        [
+            # Invalid parameter structure
+            ("invalid parameter structure with spaces", "Invalid parameter"),
+            # Invalid tuple parameter structure
+            ("(uint256,address", "Invalid parameter"),
+            # Empty tuple parameter
+            ("()", "Invalid parameter"),
+            # Malformed array syntax
+            ("uint256[", "Invalid parameter"),
+            # Invalid modifier placement
+            ("indexed address from", "Invalid parameter"),
+            # Parameter with unbalanced parentheses
+            ("((uint256,address)", "Invalid parenthesis"),
+        ],
+    )
+    def test_invalid_parameter_parsing(self, input_str, expected_error):
+        """Test invalid parameter parsing cases that raise errors."""
+        with pytest.raises(ValueError, match=expected_error):
+            parse_abi_parameter(input_str)
 
 
 class TestParseFunctionSignature:
     """Test function signature parsing."""
 
-    def test_basic_function(self):
-        """Test basic function parsing."""
-        result = parse_function_signature("function transfer(address,uint256)")
-        assert result == {
-            "type": "function",
-            "name": "transfer",
-            "stateMutability": "nonpayable",
-            "inputs": [{"type": "address"}, {"type": "uint256"}],
-            "outputs": [],
-        }
+    @pytest.mark.parametrize(
+        "signature, expected",
+        [
+            # Basic function
+            (
+                "function transfer(address,uint256)",
+                {
+                    "type": "function",
+                    "name": "transfer",
+                    "stateMutability": "nonpayable",
+                    "inputs": [{"type": "address"}, {"type": "uint256"}],
+                    "outputs": [],
+                },
+            ),
+            # Function with state mutability
+            (
+                "function balanceOf(address) view returns (uint256)",
+                {
+                    "type": "function",
+                    "name": "balanceOf",
+                    "stateMutability": "view",
+                    "inputs": [{"type": "address"}],
+                    "outputs": [{"type": "uint256"}],
+                },
+            ),
+            # Function with return values
+            (
+                "function getValues() returns (uint256,bool)",
+                {
+                    "type": "function",
+                    "name": "getValues",
+                    "stateMutability": "nonpayable",
+                    "inputs": [],
+                    "outputs": [{"type": "uint256"}, {"type": "bool"}],
+                },
+            ),
+            # Function with scope modifiers
+            (
+                "function transfer(address,uint256) external",
+                {
+                    "type": "function",
+                    "name": "transfer",
+                    "stateMutability": "nonpayable",
+                    "inputs": [{"type": "address"}, {"type": "uint256"}],
+                    "outputs": [],
+                },
+            ),
+            # Payable function
+            (
+                "function deposit() payable",
+                {
+                    "type": "function",
+                    "name": "deposit",
+                    "stateMutability": "payable",
+                    "inputs": [],
+                    "outputs": [],
+                },
+            ),
+        ],
+    )
+    def test_valid_function_signatures(self, signature, expected):
+        """Test valid function signature parsing."""
+        result = parse_function_signature(signature)
+        assert result == expected
 
-    def test_function_with_state_mutability(self):
-        """Test function with state mutability."""
-        result = parse_function_signature(
-            "function balanceOf(address) view returns (uint256)"
-        )
-        assert result == {
-            "type": "function",
-            "name": "balanceOf",
-            "stateMutability": "view",
-            "inputs": [{"type": "address"}],
-            "outputs": [{"type": "uint256"}],
-        }
+    @pytest.mark.parametrize(
+        "signature, expected_error",
+        [
+            # Invalid function signature
+            ("invalid signature", "Invalid function signature"),
+            # Function with invalid state mutability
+            ("function test() invalid returns (uint256)", "Invalid parenthesis"),
+        ],
+    )
+    def test_invalid_function_signatures(self, signature, expected_error):
+        """Test invalid function signature parsing that raises errors."""
+        with pytest.raises(ValueError, match=expected_error):
+            parse_function_signature(signature)
 
-    def test_function_with_returns(self):
-        """Test function with return values."""
-        result = parse_function_signature("function getValues() returns (uint256,bool)")
-        assert result == {
-            "type": "function",
-            "name": "getValues",
-            "stateMutability": "nonpayable",
-            "inputs": [],
-            "outputs": [{"type": "uint256"}, {"type": "bool"}],
-        }
+    @pytest.mark.parametrize(
+        "signature, expected_name, expected_input_type, expected_output_type",
+        [
+            # Function with malformed parameters
+            ("function test(uint256)", "test", "uint256", None),
+            # Function with malformed returns
+            ("function test() returns (uint256)", "test", None, "uint256"),
+        ],
+    )
+    def test_malformed_function_signatures(
+        self, signature, expected_name, expected_input_type, expected_output_type
+    ):
+        """Test function signatures with malformed parameters or returns."""
+        result = parse_function_signature(signature)
+        assert result["name"] == expected_name
 
-    def test_function_with_scope(self):
-        """Test function with scope modifiers."""
-        result = parse_function_signature("function transfer(address,uint256) external")
-        assert result["name"] == "transfer"
-        assert result["stateMutability"] == "nonpayable"
+        if expected_input_type:
+            assert result["inputs"][0]["type"] == expected_input_type
 
-    def test_function_with_payable(self):
-        """Test payable function."""
-        result = parse_function_signature("function deposit() payable")
-        assert result == {
-            "type": "function",
-            "name": "deposit",
-            "stateMutability": "payable",
-            "inputs": [],
-            "outputs": [],
-        }
-
-    def test_invalid_function_signature(self):
-        """Test invalid function signature raises error."""
-        with pytest.raises(ValueError, match="Invalid function signature"):
-            parse_function_signature("invalid signature")
-
-    def test_function_with_malformed_parameters(self):
-        """Test function with malformed parameters raises error."""
-        # This actually parses successfully - the parameter is treated as type "uint256"
-        result = parse_function_signature("function test(uint256)")
-        assert result["name"] == "test"
-        assert result["inputs"][0]["type"] == "uint256"
-
-    def test_function_with_malformed_returns(self):
-        """Test function with malformed returns raises error."""
-        # This actually parses successfully - the return is treated as type "uint256"
-        result = parse_function_signature("function test() returns (uint256)")
-        assert result["name"] == "test"
-        assert result["outputs"][0]["type"] == "uint256"
-
-    def test_function_with_invalid_state_mutability(self):
-        """Test function with invalid state mutability raises error."""
-        # This fails because "invalid" is not a valid state mutability
-        # and breaks the parsing
-        with pytest.raises(ValueError, match="Invalid parenthesis"):
-            parse_function_signature("function test() invalid returns (uint256)")
+        if expected_output_type:
+            assert result["outputs"][0]["type"] == expected_output_type
 
 
 class TestParseEventSignature:
     """Test event signature parsing."""
 
-    def test_basic_event(self):
-        """Test basic event parsing."""
-        result = parse_event_signature("event Transfer(address,uint256)")
-        assert result == {
-            "type": "event",
-            "name": "Transfer",
-            "inputs": [{"type": "address"}, {"type": "uint256"}],
-        }
+    @pytest.mark.parametrize(
+        "signature, expected",
+        [
+            # Basic event
+            (
+                "event Transfer(address,uint256)",
+                {
+                    "type": "event",
+                    "name": "Transfer",
+                    "inputs": [{"type": "address"}, {"type": "uint256"}],
+                },
+            ),
+            # Event with indexed parameters
+            (
+                "event Transfer(address indexed from, address indexed to, "
+                "uint256 value)",
+                {
+                    "type": "event",
+                    "name": "Transfer",
+                    "inputs": [
+                        {"type": "address", "name": "from", "indexed": True},
+                        {"type": "address", "name": "to", "indexed": True},
+                        {"type": "uint256", "name": "value"},
+                    ],
+                },
+            ),
+            # Event with named parameters
+            (
+                "event Approval(address owner, address spender, uint256 value)",
+                {
+                    "type": "event",
+                    "name": "Approval",
+                    "inputs": [
+                        {"type": "address", "name": "owner"},
+                        {"type": "address", "name": "spender"},
+                        {"type": "uint256", "name": "value"},
+                    ],
+                },
+            ),
+        ],
+    )
+    def test_valid_event_signatures(self, signature, expected):
+        """Test valid event signature parsing."""
+        result = parse_event_signature(signature)
+        assert result == expected
 
-    def test_event_with_indexed_parameters(self):
-        """Test event with indexed parameters."""
-        result = parse_event_signature(
-            "event Transfer(address indexed from, address indexed to, uint256 value)"
-        )
-        assert result == {
-            "type": "event",
-            "name": "Transfer",
-            "inputs": [
-                {"type": "address", "name": "from", "indexed": True},
-                {"type": "address", "name": "to", "indexed": True},
-                {"type": "uint256", "name": "value"},
-            ],
-        }
+    @pytest.mark.parametrize(
+        "signature, expected_error",
+        [
+            # Invalid event signature
+            ("invalid event signature", "Invalid event signature"),
+            # Event with invalid modifiers
+            ("event Transfer(address memory from)", "Invalid modifier"),
+        ],
+    )
+    def test_invalid_event_signatures(self, signature, expected_error):
+        """Test invalid event signature parsing that raises errors."""
+        with pytest.raises(ValueError, match=expected_error):
+            parse_event_signature(signature)
 
-    def test_event_with_named_parameters(self):
-        """Test event with named parameters."""
-        result = parse_event_signature(
-            "event Approval(address owner, address spender, uint256 value)"
-        )
-        assert result == {
-            "type": "event",
-            "name": "Approval",
-            "inputs": [
-                {"type": "address", "name": "owner"},
-                {"type": "address", "name": "spender"},
-                {"type": "uint256", "name": "value"},
-            ],
-        }
-
-    def test_invalid_event_signature(self):
-        """Test invalid event signature raises error."""
-        with pytest.raises(ValueError, match="Invalid event signature"):
-            parse_event_signature("invalid event signature")
-
-    def test_event_with_malformed_parameters(self):
-        """Test event with malformed parameters raises error."""
-        # This actually parses successfully - the parameter is treated as type "address"
-        result = parse_event_signature("event Transfer(address)")
-        assert result["name"] == "Transfer"
-        assert result["inputs"][0]["type"] == "address"
-
-    def test_event_with_invalid_modifiers(self):
-        """Test event with invalid modifiers raises error."""
-        with pytest.raises(ValueError, match="Invalid modifier"):
-            parse_event_signature("event Transfer(address memory from)")
+    @pytest.mark.parametrize(
+        "signature, expected_name, expected_input_type",
+        [
+            # Event with malformed parameters
+            ("event Transfer(address)", "Transfer", "address"),
+        ],
+    )
+    def test_malformed_event_signatures(
+        self, signature, expected_name, expected_input_type
+    ):
+        """Test event signatures with malformed parameters."""
+        result = parse_event_signature(signature)
+        assert result["name"] == expected_name
+        assert result["inputs"][0]["type"] == expected_input_type
 
 
 class TestParseErrorSignature:
     """Test error signature parsing."""
 
-    def test_basic_error(self):
-        """Test basic error parsing."""
-        result = parse_error_signature("error InsufficientBalance(uint256, uint256)")
-        assert result == {
-            "type": "error",
-            "name": "InsufficientBalance",
-            "inputs": [{"type": "uint256"}, {"type": "uint256"}],
-        }
+    @pytest.mark.parametrize(
+        "signature, expected",
+        [
+            # Basic error
+            (
+                "error InsufficientBalance(uint256, uint256)",
+                {
+                    "type": "error",
+                    "name": "InsufficientBalance",
+                    "inputs": [{"type": "uint256"}, {"type": "uint256"}],
+                },
+            ),
+            # Error with named parameters
+            (
+                "error InsufficientBalance(uint256 available, uint256 required)",
+                {
+                    "type": "error",
+                    "name": "InsufficientBalance",
+                    "inputs": [
+                        {"type": "uint256", "name": "available"},
+                        {"type": "uint256", "name": "required"},
+                    ],
+                },
+            ),
+            # Error with complex types
+            (
+                "error TransferFailed(address from, address to, uint256 amount)",
+                {
+                    "type": "error",
+                    "name": "TransferFailed",
+                    "inputs": [
+                        {"type": "address", "name": "from"},
+                        {"type": "address", "name": "to"},
+                        {"type": "uint256", "name": "amount"},
+                    ],
+                },
+            ),
+        ],
+    )
+    def test_valid_error_signatures(self, signature, expected):
+        """Test valid error signature parsing."""
+        result = parse_error_signature(signature)
+        assert result == expected
 
-    def test_error_with_named_parameters(self):
-        """Test error with named parameters."""
-        result = parse_error_signature(
-            "error InsufficientBalance(uint256 available, uint256 required)"
-        )
-        assert result == {
-            "type": "error",
-            "name": "InsufficientBalance",
-            "inputs": [
-                {"type": "uint256", "name": "available"},
-                {"type": "uint256", "name": "required"},
-            ],
-        }
+    @pytest.mark.parametrize(
+        "signature, expected_error",
+        [
+            # Invalid error signature
+            ("invalid error signature", "Invalid error signature"),
+        ],
+    )
+    def test_invalid_error_signatures(self, signature, expected_error):
+        """Test invalid error signature parsing that raises errors."""
+        with pytest.raises(ValueError, match=expected_error):
+            parse_error_signature(signature)
 
-    def test_error_with_complex_types(self):
-        """Test error with complex parameter types."""
-        result = parse_error_signature(
-            "error TransferFailed(address from, address to, uint256 amount)"
-        )
-        assert result == {
-            "type": "error",
-            "name": "TransferFailed",
-            "inputs": [
-                {"type": "address", "name": "from"},
-                {"type": "address", "name": "to"},
-                {"type": "uint256", "name": "amount"},
-            ],
-        }
-
-    def test_invalid_error_signature(self):
-        """Test invalid error signature raises error."""
-        with pytest.raises(ValueError, match="Invalid error signature"):
-            parse_error_signature("invalid error signature")
-
-    def test_error_with_malformed_parameters(self):
-        """Test error with malformed parameters raises error."""
-        # This actually parses successfully - the parameter is treated as type "uint256"
-        result = parse_error_signature("error TestError(uint256)")
-        assert result["name"] == "TestError"
-        assert result["inputs"][0]["type"] == "uint256"
+    @pytest.mark.parametrize(
+        "signature, expected_name, expected_input_type",
+        [
+            # Error with malformed parameters
+            ("error TestError(uint256)", "TestError", "uint256"),
+        ],
+    )
+    def test_malformed_error_signatures(
+        self, signature, expected_name, expected_input_type
+    ):
+        """Test error signatures with malformed parameters."""
+        result = parse_error_signature(signature)
+        assert result["name"] == expected_name
+        assert result["inputs"][0]["type"] == expected_input_type
 
 
 class TestParseConstructorSignature:
     """Test constructor signature parsing."""
 
-    def test_basic_constructor(self):
-        """Test basic constructor parsing."""
-        result = parse_constructor_signature("constructor(address, uint256)")
-        assert result == {
-            "type": "constructor",
-            "stateMutability": "nonpayable",
-            "inputs": [{"type": "address"}, {"type": "uint256"}],
-        }
+    @pytest.mark.parametrize(
+        "signature, expected",
+        [
+            # Basic constructor
+            (
+                "constructor(address, uint256)",
+                {
+                    "type": "constructor",
+                    "stateMutability": "nonpayable",
+                    "inputs": [{"type": "address"}, {"type": "uint256"}],
+                },
+            ),
+            # Constructor with named parameters
+            (
+                "constructor(address owner, uint256 initialSupply)",
+                {
+                    "type": "constructor",
+                    "stateMutability": "nonpayable",
+                    "inputs": [
+                        {"type": "address", "name": "owner"},
+                        {"type": "uint256", "name": "initialSupply"},
+                    ],
+                },
+            ),
+            # Payable constructor
+            (
+                "constructor(address) payable",
+                {
+                    "type": "constructor",
+                    "stateMutability": "payable",
+                    "inputs": [{"type": "address"}],
+                },
+            ),
+            # Constructor with complex types
+            (
+                "constructor(string memory name, string memory symbol, uint8 decimals)",
+                {
+                    "type": "constructor",
+                    "stateMutability": "nonpayable",
+                    "inputs": [
+                        {"type": "string", "name": "name"},
+                        {"type": "string", "name": "symbol"},
+                        {"type": "uint8", "name": "decimals"},
+                    ],
+                },
+            ),
+        ],
+    )
+    def test_valid_constructor_signatures(self, signature, expected):
+        """Test valid constructor signature parsing."""
+        result = parse_constructor_signature(signature)
+        assert result == expected
 
-    def test_constructor_with_named_parameters(self):
-        """Test constructor with named parameters."""
-        result = parse_constructor_signature(
-            "constructor(address owner, uint256 initialSupply)"
-        )
-        assert result == {
-            "type": "constructor",
-            "stateMutability": "nonpayable",
-            "inputs": [
-                {"type": "address", "name": "owner"},
-                {"type": "uint256", "name": "initialSupply"},
-            ],
-        }
+    @pytest.mark.parametrize(
+        "signature, expected_error",
+        [
+            # Invalid constructor signature
+            ("invalid constructor signature", "Invalid constructor signature"),
+        ],
+    )
+    def test_invalid_constructor_signatures(self, signature, expected_error):
+        """Test invalid constructor signature parsing that raises errors."""
+        with pytest.raises(ValueError, match=expected_error):
+            parse_constructor_signature(signature)
 
-    def test_payable_constructor(self):
-        """Test payable constructor."""
-        result = parse_constructor_signature("constructor(address) payable")
-        assert result == {
-            "type": "constructor",
-            "stateMutability": "payable",
-            "inputs": [{"type": "address"}],
-        }
-
-    def test_constructor_with_complex_types(self):
-        """Test constructor with complex parameter types."""
-        result = parse_constructor_signature(
-            "constructor(string memory name, string memory symbol, uint8 decimals)"
-        )
-        assert result == {
-            "type": "constructor",
-            "stateMutability": "nonpayable",
-            "inputs": [
-                {"type": "string", "name": "name"},
-                {"type": "string", "name": "symbol"},
-                {"type": "uint8", "name": "decimals"},
-            ],
-        }
-
-    def test_invalid_constructor_signature(self):
-        """Test invalid constructor signature raises error."""
-        with pytest.raises(ValueError, match="Invalid constructor signature"):
-            parse_constructor_signature("invalid constructor signature")
-
-    def test_constructor_with_malformed_parameters(self):
-        """Test constructor with malformed parameters raises error."""
-        # This actually parses successfully - the parameter is treated as type "uint256"
-        result = parse_constructor_signature("constructor(uint256)")
-        assert result["type"] == "constructor"
-        assert result["inputs"][0]["type"] == "uint256"
+    @pytest.mark.parametrize(
+        "signature, expected_type, expected_input_type",
+        [
+            # Constructor with malformed parameters
+            ("constructor(uint256)", "constructor", "uint256"),
+        ],
+    )
+    def test_malformed_constructor_signatures(
+        self, signature, expected_type, expected_input_type
+    ):
+        """Test constructor signatures with malformed parameters."""
+        result = parse_constructor_signature(signature)
+        assert result["type"] == expected_type
+        assert result["inputs"][0]["type"] == expected_input_type
 
 
 class TestParseFallbackSignature:
     """Test fallback signature parsing."""
 
-    def test_basic_fallback(self):
-        """Test basic fallback parsing."""
-        result = parse_fallback_signature("fallback() external")
-        assert result == {
-            "type": "fallback",
-            "stateMutability": "nonpayable",
-        }
+    @pytest.mark.parametrize(
+        "signature, expected",
+        [
+            # Basic fallback
+            (
+                "fallback() external",
+                {
+                    "type": "fallback",
+                    "stateMutability": "nonpayable",
+                },
+            ),
+            # Payable fallback
+            (
+                "fallback() external payable",
+                {
+                    "type": "fallback",
+                    "stateMutability": "payable",
+                },
+            ),
+        ],
+    )
+    def test_valid_fallback_signatures(self, signature, expected):
+        """Test valid fallback signature parsing."""
+        result = parse_fallback_signature(signature)
+        assert result == expected
 
-    def test_payable_fallback(self):
-        """Test payable fallback."""
-        result = parse_fallback_signature("fallback() external payable")
-        assert result == {
-            "type": "fallback",
-            "stateMutability": "payable",
-        }
-
-    def test_invalid_fallback_signature(self):
-        """Test invalid fallback signature raises error."""
-        with pytest.raises(ValueError, match="Invalid fallback signature"):
-            parse_fallback_signature("invalid fallback signature")
-
-    def test_fallback_with_parameters(self):
-        """Test fallback with parameters raises error."""
-        with pytest.raises(ValueError, match="Invalid fallback signature"):
-            parse_fallback_signature("fallback(address) external")
+    @pytest.mark.parametrize(
+        "signature, expected_error",
+        [
+            # Invalid fallback signature
+            ("invalid fallback signature", "Invalid fallback signature"),
+            # Fallback with parameters
+            ("fallback(address) external", "Invalid fallback signature"),
+        ],
+    )
+    def test_invalid_fallback_signatures(self, signature, expected_error):
+        """Test invalid fallback signature parsing that raises errors."""
+        with pytest.raises(ValueError, match=expected_error):
+            parse_fallback_signature(signature)
 
 
 class TestParseReceiveSignature:
     """Test receive signature parsing."""
 
-    def test_receive(self):
-        """Test receive parsing."""
-        result = parse_receive_signature("receive() external payable")
-        assert result == {
-            "type": "receive",
-            "stateMutability": "payable",
-        }
+    @pytest.mark.parametrize(
+        "signature, expected",
+        [
+            # Receive
+            (
+                "receive() external payable",
+                {
+                    "type": "receive",
+                    "stateMutability": "payable",
+                },
+            ),
+        ],
+    )
+    def test_valid_receive_signatures(self, signature, expected):
+        """Test valid receive signature parsing."""
+        result = parse_receive_signature(signature)
+        assert result == expected
 
-    def test_invalid_receive_signature(self):
-        """Test invalid receive signature raises error."""
-        with pytest.raises(ValueError, match="Invalid receive signature"):
-            parse_receive_signature("invalid receive signature")
-
-    def test_receive_with_parameters(self):
-        """Test receive with parameters raises error."""
-        with pytest.raises(ValueError, match="Invalid receive signature"):
-            parse_receive_signature("receive(address) external payable")
-
-    def test_receive_without_payable(self):
-        """Test receive without payable raises error."""
-        with pytest.raises(ValueError, match="Invalid receive signature"):
-            parse_receive_signature("receive() external")
+    @pytest.mark.parametrize(
+        "signature, expected_error",
+        [
+            # Invalid receive signature
+            ("invalid receive signature", "Invalid receive signature"),
+            # Receive with parameters
+            ("receive(address) external payable", "Invalid receive signature"),
+            # Receive without payable
+            ("receive() external", "Invalid receive signature"),
+        ],
+    )
+    def test_invalid_receive_signatures(self, signature, expected_error):
+        """Test invalid receive signature parsing that raises errors."""
+        with pytest.raises(ValueError, match=expected_error):
+            parse_receive_signature(signature)
 
 
 class TestRegexPatterns:
     """Test regex patterns for signature matching."""
 
-    def test_function_signature_regex(self):
-        """Test function signature regex patterns."""
-        # Basic function
-        match = FUNCTION_SIGNATURE_REGEX.match("function transfer(address,uint256)")
+    @pytest.mark.parametrize(
+        "pattern, signature, expected_groups",
+        [
+            # Function signature regex
+            (
+                FUNCTION_SIGNATURE_REGEX,
+                "function transfer(address,uint256)",
+                {"name": "transfer", "parameters": "address,uint256"},
+            ),
+            (
+                FUNCTION_SIGNATURE_REGEX,
+                "function balanceOf(address) returns (uint256)",
+                {"name": "balanceOf", "parameters": "address", "returns": "uint256"},
+            ),
+            (
+                FUNCTION_SIGNATURE_REGEX,
+                "function getBalance() view returns (uint256)",
+                {
+                    "name": "getBalance",
+                    "parameters": "",
+                    "stateMutability": "view",
+                    "returns": "uint256",
+                },
+            ),
+            # Event signature regex
+            (
+                EVENT_SIGNATURE_REGEX,
+                "event Transfer(address,uint256)",
+                {"name": "Transfer", "parameters": "address,uint256"},
+            ),
+            # Error signature regex
+            (
+                ERROR_SIGNATURE_REGEX,
+                "error InsufficientBalance(uint256 available, uint256 required)",
+                {
+                    "name": "InsufficientBalance",
+                    "parameters": "uint256 available, uint256 required",
+                },
+            ),
+            # Constructor signature regex
+            (
+                CONSTRUCTOR_SIGNATURE_REGEX,
+                "constructor(address,uint256)",
+                {"parameters": "address,uint256"},
+            ),
+            (
+                CONSTRUCTOR_SIGNATURE_REGEX,
+                "constructor(address) payable",
+                {"parameters": "address", "stateMutability": "payable"},
+            ),
+            # Fallback signature regex
+            (
+                FALLBACK_SIGNATURE_REGEX,
+                "fallback() external",
+                {},
+            ),
+            (
+                FALLBACK_SIGNATURE_REGEX,
+                "fallback() external payable",
+                {"stateMutability": "payable"},
+            ),
+            # Receive signature regex
+            (
+                RECEIVE_SIGNATURE_REGEX,
+                "receive() external payable",
+                {},
+            ),
+        ],
+    )
+    def test_regex_patterns(self, pattern, signature, expected_groups):
+        """Test regex patterns for signature matching."""
+        match = pattern.match(signature)
         assert match is not None
-        assert match.group("name") == "transfer"
-        assert match.group("parameters") == "address,uint256"
 
-        # Function with returns
-        match = FUNCTION_SIGNATURE_REGEX.match(
-            "function balanceOf(address) returns (uint256)"
-        )
-        assert match is not None
-        assert match.group("returns") == "uint256"
-
-        # Function with state mutability
-        match = FUNCTION_SIGNATURE_REGEX.match(
-            "function getBalance() view returns (uint256)"
-        )
-        assert match is not None
-        assert match.group("stateMutability") == "view"
-
-    def test_event_signature_regex(self):
-        """Test event signature regex patterns."""
-        match = EVENT_SIGNATURE_REGEX.match("event Transfer(address,uint256)")
-        assert match is not None
-        assert match.group("name") == "Transfer"
-        assert match.group("parameters") == "address,uint256"
-
-    def test_error_signature_regex(self):
-        """Test error signature regex patterns."""
-        match = ERROR_SIGNATURE_REGEX.match(
-            "error InsufficientBalance(uint256 available, uint256 required)"
-        )
-        assert match is not None
-        assert match.group("name") == "InsufficientBalance"
-        assert match.group("parameters") == "uint256 available, uint256 required"
-
-    def test_constructor_signature_regex(self):
-        """Test constructor signature regex patterns."""
-        match = CONSTRUCTOR_SIGNATURE_REGEX.match("constructor(address,uint256)")
-        assert match is not None
-        assert match.group("parameters") == "address,uint256"
-
-        match = CONSTRUCTOR_SIGNATURE_REGEX.match("constructor(address) payable")
-        assert match is not None
-        assert match.group("stateMutability") == "payable"
-
-    def test_fallback_signature_regex(self):
-        """Test fallback signature regex patterns."""
-        match = FALLBACK_SIGNATURE_REGEX.match("fallback() external")
-        assert match is not None
-
-        match = FALLBACK_SIGNATURE_REGEX.match("fallback() external payable")
-        assert match is not None
-        assert match.group("stateMutability") == "payable"
-
-    def test_receive_signature_regex(self):
-        """Test receive signature regex patterns."""
-        match = RECEIVE_SIGNATURE_REGEX.match("receive() external payable")
-        assert match is not None
+        for group_name, expected_value in expected_groups.items():
+            assert match.group(group_name) == expected_value
 
 
 class TestParseSignature:
     """Test generic signature parsing."""
 
-    def test_parse_function_signature(self):
-        """Test parsing function signature via generic parser."""
-        result = parse_signature("function transfer(address to, uint256 amount)")
-        assert result == {
-            "type": "function",
-            "name": "transfer",
-            "stateMutability": "nonpayable",
-            "inputs": [
-                {"type": "address", "name": "to"},
-                {"type": "uint256", "name": "amount"},
-            ],
-            "outputs": [],
-        }
-
-    def test_parse_event_signature(self):
-        """Test parsing event signature via generic parser."""
-        result = parse_signature(
-            "event Transfer(address indexed from, address indexed to, uint256 value)"
-        )
-        assert result == {
-            "type": "event",
-            "name": "Transfer",
-            "inputs": [
-                {"type": "address", "name": "from", "indexed": True},
-                {"type": "address", "name": "to", "indexed": True},
-                {"type": "uint256", "name": "value"},
-            ],
-        }
-
-    def test_parse_error_signature(self):
-        """Test parsing error signature via generic parser."""
-        result = parse_signature(
-            "error InsufficientBalance(uint256 available, uint256 required)"
-        )
-        assert result == {
-            "type": "error",
-            "name": "InsufficientBalance",
-            "inputs": [
-                {"type": "uint256", "name": "available"},
-                {"type": "uint256", "name": "required"},
-            ],
-        }
-
-    def test_parse_constructor_signature(self):
-        """Test parsing constructor signature via generic parser."""
-        result = parse_signature("constructor(address owner, uint256 initialSupply)")
-        assert result == {
-            "type": "constructor",
-            "stateMutability": "nonpayable",
-            "inputs": [
-                {"type": "address", "name": "owner"},
-                {"type": "uint256", "name": "initialSupply"},
-            ],
-        }
-
-    def test_parse_fallback_signature(self):
-        """Test parsing fallback signature via generic parser."""
-        result = parse_signature("fallback() external payable")
-        assert result == {
-            "type": "fallback",
-            "stateMutability": "payable",
-        }
-
-    def test_parse_receive_signature(self):
-        """Test parsing receive signature via generic parser."""
-        result = parse_signature("receive() external payable")
-        assert result == {
-            "type": "receive",
-            "stateMutability": "payable",
-        }
+    @pytest.mark.parametrize(
+        "signature, expected",
+        [
+            # Function signature
+            (
+                "function transfer(address to, uint256 amount)",
+                {
+                    "type": "function",
+                    "name": "transfer",
+                    "stateMutability": "nonpayable",
+                    "inputs": [
+                        {"type": "address", "name": "to"},
+                        {"type": "uint256", "name": "amount"},
+                    ],
+                    "outputs": [],
+                },
+            ),
+            # Event signature
+            (
+                "event Transfer(address indexed from, address indexed to, "
+                "uint256 value)",
+                {
+                    "type": "event",
+                    "name": "Transfer",
+                    "inputs": [
+                        {"type": "address", "name": "from", "indexed": True},
+                        {"type": "address", "name": "to", "indexed": True},
+                        {"type": "uint256", "name": "value"},
+                    ],
+                },
+            ),
+            # Error signature
+            (
+                "error InsufficientBalance(uint256 available, uint256 required)",
+                {
+                    "type": "error",
+                    "name": "InsufficientBalance",
+                    "inputs": [
+                        {"type": "uint256", "name": "available"},
+                        {"type": "uint256", "name": "required"},
+                    ],
+                },
+            ),
+            # Constructor signature
+            (
+                "constructor(address owner, uint256 initialSupply)",
+                {
+                    "type": "constructor",
+                    "stateMutability": "nonpayable",
+                    "inputs": [
+                        {"type": "address", "name": "owner"},
+                        {"type": "uint256", "name": "initialSupply"},
+                    ],
+                },
+            ),
+            # Fallback signature
+            (
+                "fallback() external payable",
+                {
+                    "type": "fallback",
+                    "stateMutability": "payable",
+                },
+            ),
+            # Receive signature
+            (
+                "receive() external payable",
+                {
+                    "type": "receive",
+                    "stateMutability": "payable",
+                },
+            ),
+        ],
+    )
+    def test_valid_signature_parsing(self, signature, expected):
+        """Test valid signature parsing via generic parser."""
+        result = parse_signature(signature)
+        assert result == expected
 
     def test_parse_signature_with_structs(self):
         """Test parsing signatures with struct definitions."""
@@ -833,20 +885,35 @@ class TestParseSignature:
             "outputs": [],
         }
 
-    def test_unknown_signature_type(self):
-        """Test unknown signature type raises error."""
-        with pytest.raises(ValueError, match="Unknown signature type"):
-            parse_signature("unknown signature type")
+    @pytest.mark.parametrize(
+        "signature, expected_error",
+        [
+            # Unknown signature type
+            ("unknown signature type", "Unknown signature type"),
+        ],
+    )
+    def test_invalid_signature_parsing(self, signature, expected_error):
+        """Test invalid signature parsing that raises errors."""
+        with pytest.raises(ValueError, match=expected_error):
+            parse_signature(signature)
 
-    def test_parse_signature_with_malformed_parameters(self):
-        """Test parsing signature with malformed parameters raises error."""
-        # This actually parses successfully - the parameter is treated as type "uint256"
-        result = parse_signature("function test(uint256)")
-        assert result["type"] == "function"
-        assert result["inputs"][0]["type"] == "uint256"
+    @pytest.mark.parametrize(
+        "signature, expected_type, expected_input_type",
+        [
+            # Signature with malformed parameters
+            ("function test(uint256)", "function", "uint256"),
+        ],
+    )
+    def test_malformed_signature_parsing(
+        self, signature, expected_type, expected_input_type
+    ):
+        """Test signature parsing with malformed parameters."""
+        result = parse_signature(signature)
+        assert result["type"] == expected_type
+        assert result["inputs"][0]["type"] == expected_input_type
 
     def test_parse_signature_with_invalid_struct_reference(self):
-        """Test parsing signature with invalid struct reference raises error."""
+        """Test parsing signature with invalid struct reference."""
         structs = {
             "Point": [
                 {"type": "uint256", "name": "x"},
@@ -867,202 +934,261 @@ class TestParseSignature:
 class TestComplexFunctionSignatures:
     """Test complex function signatures with all ABI types."""
 
-    def test_function_with_all_parameter_types(self):
-        """Test function with all ABI parameter types."""
-        signature = (
-            "function complexFunction("
-            "bool active, "
-            "uint256 count, "
-            "int256 balance, "
-            "address owner, "
-            "string name, "
-            "bytes data, "
-            "uint8 decimals, "
-            "bytes32 hash, "
-            "uint256[] amounts, "
-            "address[10] recipients, "
-            "(uint256,address) pair"
-            ") returns (bool success, uint256 result)"
-        )
+    @pytest.mark.parametrize(
+        "signature, expected_name, expected_input_count, expected_output_count",
+        [
+            # Function with all parameter types
+            (
+                (
+                    "function complexFunction("
+                    "bool active, "
+                    "uint256 count, "
+                    "int256 balance, "
+                    "address owner, "
+                    "string name, "
+                    "bytes data, "
+                    "uint8 decimals, "
+                    "bytes32 hash, "
+                    "uint256[] amounts, "
+                    "address[10] recipients, "
+                    "(uint256,address) pair"
+                    ") returns (bool success, uint256 result)"
+                ),
+                "complexFunction",
+                11,
+                2,
+            ),
+            # Function with memory modifiers
+            (
+                (
+                    "function processData("
+                    "string memory name, "
+                    "bytes calldata data, "
+                    "uint256[] memory numbers"
+                    ") returns (string memory result)"
+                ),
+                "processData",
+                3,
+                1,
+            ),
+            # Function with complex returns
+            (
+                (
+                    "function getMultipleValues() returns ("
+                    "uint256 total, "
+                    "bool success, "
+                    "string message, "
+                    "address recipient"
+                    ")"
+                ),
+                "getMultipleValues",
+                0,
+                4,
+            ),
+        ],
+    )
+    def test_complex_function_signatures(
+        self, signature, expected_name, expected_input_count, expected_output_count
+    ):
+        """Test complex function signatures with various parameter types."""
         result = parse_function_signature(signature)
-        assert result["name"] == "complexFunction"
-        assert len(result["inputs"]) == 11
-        assert len(result["outputs"]) == 2
+        assert result["name"] == expected_name
+        assert len(result["inputs"]) == expected_input_count
+        assert len(result["outputs"]) == expected_output_count
 
-    def test_function_with_memory_modifiers(self):
-        """Test function with memory and calldata modifiers."""
-        signature = (
-            "function processData("
-            "string memory name, "
-            "bytes calldata data, "
-            "uint256[] memory numbers"
-            ") returns (string memory result)"
-        )
-        result = parse_function_signature(signature)
-        assert result["name"] == "processData"
-        assert len(result["inputs"]) == 3
-        assert len(result["outputs"]) == 1
-
-    def test_function_with_complex_returns(self):
-        """Test function with complex return types."""
-        signature = (
-            "function getMultipleValues() returns ("
-            "uint256 total, "
-            "bool success, "
-            "string message, "
-            "address recipient"
-            ")"
-        )
-        result = parse_function_signature(signature)
-        assert result["name"] == "getMultipleValues"
-        assert len(result["outputs"]) == 4
-        assert result["outputs"][0] == {"type": "uint256", "name": "total"}
-        assert result["outputs"][1] == {"type": "bool", "name": "success"}
-        assert result["outputs"][2] == {"type": "string", "name": "message"}
-        assert result["outputs"][3] == {"type": "address", "name": "recipient"}
-
-    def test_function_with_array_of_tuples(self):
+    @pytest.mark.parametrize(
+        "signature, expected_name, expected_inputs, expected_outputs",
+        [
+            # Function with array of tuples as parameter
+            (
+                "function processPairs((uint256,address)[] pairs)",
+                "processPairs",
+                [
+                    {
+                        "type": "tuple[]",
+                        "name": "pairs",
+                        "components": [{"type": "uint256"}, {"type": "address"}],
+                    }
+                ],
+                [],
+            ),
+            # Function with array of tuples as return value
+            (
+                "function getPairs() returns ((uint256,address)[])",
+                "getPairs",
+                [],
+                [
+                    {
+                        "type": "tuple[]",
+                        "components": [{"type": "uint256"}, {"type": "address"}],
+                    }
+                ],
+            ),
+            # Function with multi-dimensional array of tuples
+            (
+                "function processMatrix((uint256,address)[][] matrix)",
+                "processMatrix",
+                [
+                    {
+                        "type": "tuple[][]",
+                        "name": "matrix",
+                        "components": [{"type": "uint256"}, {"type": "address"}],
+                    }
+                ],
+                [],
+            ),
+            # Function with fixed-size array of tuples
+            (
+                "function processFixedPairs((uint256,address)[10] pairs)",
+                "processFixedPairs",
+                [
+                    {
+                        "type": "tuple[10]",
+                        "name": "pairs",
+                        "components": [{"type": "uint256"}, {"type": "address"}],
+                    }
+                ],
+                [],
+            ),
+        ],
+    )
+    def test_function_with_array_of_tuples(
+        self, signature, expected_name, expected_inputs, expected_outputs
+    ):
         """Test function with array of tuple parameters and returns."""
-        # Function with array of tuples as parameter
-        signature = "function processPairs((uint256,address)[] pairs)"
         result = parse_function_signature(signature)
-        assert result["name"] == "processPairs"
-        assert result["inputs"] == [
-            {
-                "type": "tuple[]",
-                "name": "pairs",
-                "components": [{"type": "uint256"}, {"type": "address"}],
-            }
-        ]
-
-        # Function with array of tuples as return value
-        signature = "function getPairs() returns ((uint256,address)[])"
-        result = parse_function_signature(signature)
-        assert result["name"] == "getPairs"
-        assert result["outputs"] == [
-            {
-                "type": "tuple[]",
-                "components": [{"type": "uint256"}, {"type": "address"}],
-            }
-        ]
-
-        # Function with multi-dimensional array of tuples
-        signature = "function processMatrix((uint256,address)[][] matrix)"
-        result = parse_function_signature(signature)
-        assert result["name"] == "processMatrix"
-        assert result["inputs"] == [
-            {
-                "type": "tuple[][]",
-                "name": "matrix",
-                "components": [{"type": "uint256"}, {"type": "address"}],
-            }
-        ]
-
-        # Function with fixed-size array of tuples
-        signature = "function processFixedPairs((uint256,address)[10] pairs)"
-        result = parse_function_signature(signature)
-        assert result["name"] == "processFixedPairs"
-        assert result["inputs"] == [
-            {
-                "type": "tuple[10]",
-                "name": "pairs",
-                "components": [{"type": "uint256"}, {"type": "address"}],
-            }
-        ]
+        assert result["name"] == expected_name
+        assert result["inputs"] == expected_inputs
+        assert result["outputs"] == expected_outputs
 
 
 class TestIsSolidityType:
     """Test Solidity type validation."""
 
-    def test_basic_types(self):
-        """Test basic Solidity types."""
-        assert is_solidity_type("address") is True
-        assert is_solidity_type("bool") is True
-        assert is_solidity_type("string") is True
-        assert is_solidity_type("bytes") is True
-        assert is_solidity_type("function") is True
-
-    def test_integer_types(self):
-        """Test integer types."""
-        assert is_solidity_type("uint8") is True
-        assert is_solidity_type("uint256") is True
-        assert is_solidity_type("int8") is True
-        assert is_solidity_type("int256") is True
-        assert is_solidity_type("uint") is False  # Should be uint256
-        assert is_solidity_type("int") is False  # Should be int256
-
-    def test_bytes_types(self):
-        """Test fixed-size bytes types."""
-        assert is_solidity_type("bytes1") is True
-        assert is_solidity_type("bytes32") is True
-        assert is_solidity_type("bytes33") is False  # Invalid
-        assert is_solidity_type("bytes0") is False  # Invalid
-
-    def test_invalid_types(self):
-        """Test invalid types."""
-        assert is_solidity_type("invalid") is False
-        assert is_solidity_type("tuple") is False
-        assert is_solidity_type("struct") is False
+    @pytest.mark.parametrize(
+        "type_str, expected",
+        [
+            # Basic types
+            ("address", True),
+            ("bool", True),
+            ("string", True),
+            ("bytes", True),
+            ("function", True),
+            # Integer types
+            ("uint8", True),
+            ("uint256", True),
+            ("int8", True),
+            ("int256", True),
+            ("uint", False),  # Should be uint256
+            ("int", False),  # Should be int256
+            # Bytes types
+            ("bytes1", True),
+            ("bytes32", True),
+            ("bytes33", False),  # Invalid
+            ("bytes0", False),  # Invalid
+            # Invalid types
+            ("invalid", False),
+            ("tuple", False),
+            ("struct", False),
+        ],
+    )
+    def test_solidity_type_validation(self, type_str, expected):
+        """Test Solidity type validation."""
+        assert is_solidity_type(type_str) is expected
 
 
 class TestIsStructSignature:
     """Test struct signature detection."""
 
-    def test_valid_struct_signatures(self):
-        """Test valid struct signatures."""
-        assert is_struct_signature("struct Point { uint256 x; uint256 y; }") is True
-        assert is_struct_signature("struct User { string name; address addr; }") is True
-        assert is_struct_signature("struct Empty { }") is True
-
-    def test_invalid_struct_signatures(self):
-        """Test invalid struct signatures."""
-        assert is_struct_signature("function test()") is False
-        assert is_struct_signature("event Transfer(address)") is False
-        assert is_struct_signature("struct") is False
-        assert is_struct_signature("struct Point") is False
+    @pytest.mark.parametrize(
+        "signature, expected",
+        [
+            # Valid struct signatures
+            ("struct Point { uint256 x; uint256 y; }", True),
+            ("struct User { string name; address addr; }", True),
+            ("struct Empty { }", True),
+            # Invalid struct signatures
+            ("function test()", False),
+            ("event Transfer(address)", False),
+            ("struct", False),
+            ("struct Point", False),
+        ],
+    )
+    def test_struct_signature_detection(self, signature, expected):
+        """Test struct signature detection."""
+        assert is_struct_signature(signature) is expected
 
 
 class TestParseStructs:
     """Test struct parsing functionality."""
 
-    def test_basic_struct(self):
-        """Test parsing a basic struct."""
-        signatures = ["struct Point { uint256 x; uint256 y; }"]
+    @pytest.mark.parametrize(
+        "signatures, expected_structs",
+        [
+            # Basic struct
+            (
+                ["struct Point { uint256 x; uint256 y; }"],
+                {
+                    "Point": [
+                        {"type": "uint256", "name": "x"},
+                        {"type": "uint256", "name": "y"},
+                    ]
+                },
+            ),
+            # Struct with various types
+            (
+                [
+                    "struct User { string name; address addr; uint256 balance; "
+                    "bool active; }"
+                ],
+                {
+                    "User": [
+                        {"type": "string", "name": "name"},
+                        {"type": "address", "name": "addr"},
+                        {"type": "uint256", "name": "balance"},
+                        {"type": "bool", "name": "active"},
+                    ]
+                },
+            ),
+            # Multiple structs
+            (
+                [
+                    "struct Point { uint256 x; uint256 y; }",
+                    "struct User { string name; address addr; }",
+                    "function test()",  # Should be ignored
+                ],
+                {
+                    "Point": [
+                        {"type": "uint256", "name": "x"},
+                        {"type": "uint256", "name": "y"},
+                    ],
+                    "User": [
+                        {"type": "string", "name": "name"},
+                        {"type": "address", "name": "addr"},
+                    ],
+                },
+            ),
+            # Struct with arrays
+            (
+                ["struct Data { uint256[] values; address[10] addresses; }"],
+                {
+                    "Data": [
+                        {"type": "uint256[]", "name": "values"},
+                        {"type": "address[10]", "name": "addresses"},
+                    ]
+                },
+            ),
+            # Struct with missing field name (parses successfully)
+            (
+                ["struct Invalid { uint256; }"],
+                {"Invalid": [{"type": "uint256"}]},
+            ),
+        ],
+    )
+    def test_valid_struct_parsing(self, signatures, expected_structs):
+        """Test valid struct parsing cases."""
         structs = parse_structs(signatures)
-
-        assert "Point" in structs
-        assert structs["Point"] == [
-            {"type": "uint256", "name": "x"},
-            {"type": "uint256", "name": "y"},
-        ]
-
-    def test_struct_with_various_types(self):
-        """Test struct with various field types."""
-        signatures = [
-            "struct User { string name; address addr; uint256 balance; bool active; }"
-        ]
-        structs = parse_structs(signatures)
-
-        assert "User" in structs
-        assert structs["User"] == [
-            {"type": "string", "name": "name"},
-            {"type": "address", "name": "addr"},
-            {"type": "uint256", "name": "balance"},
-            {"type": "bool", "name": "active"},
-        ]
-
-    def test_multiple_structs(self):
-        """Test parsing multiple structs."""
-        signatures = [
-            "struct Point { uint256 x; uint256 y; }",
-            "struct User { string name; address addr; }",
-            "function test()",  # Should be ignored
-        ]
-        structs = parse_structs(signatures)
-
-        assert "Point" in structs
-        assert "User" in structs
-        assert len(structs) == 2
+        assert structs == expected_structs
 
     def test_nested_structs(self):
         """Test nested struct references."""
@@ -1095,128 +1221,156 @@ class TestParseStructs:
             },
         ]
 
-    def test_struct_with_arrays(self):
-        """Test struct with array fields."""
-        signatures = ["struct Data { uint256[] values; address[10] addresses; }"]
-        structs = parse_structs(signatures)
-
-        assert "Data" in structs
-        assert structs["Data"] == [
-            {"type": "uint256[]", "name": "values"},
-            {"type": "address[10]", "name": "addresses"},
-        ]
-
-    def test_circular_reference_detection(self):
-        """Test circular reference detection."""
-        signatures = [
-            "struct A { B b; }",
-            "struct B { A a; }",
-        ]
-
-        with pytest.raises(ValueError, match="Circular reference detected"):
-            parse_structs(signatures)
-
-    def test_invalid_struct_signature(self):
-        """Test invalid struct signature raises error."""
-        signatures = ["struct Invalid { }"]
-
-        with pytest.raises(ValueError, match="Invalid struct signature"):
-            parse_structs(signatures)
-
-    def test_struct_with_unknown_type(self):
-        """Test struct with unknown type raises error."""
-        signatures = ["struct Invalid { unknown_type field; }"]
-
-        with pytest.raises(ValueError, match="Unknown type"):
-            parse_structs(signatures)
-
-    def test_struct_with_invalid_field_syntax(self):
-        """Test struct with invalid field syntax raises error."""
-        signatures = ["struct Invalid { uint256; }"]  # Missing field name
-
-        # This actually parses successfully - creates a field with type "uint256"
-        result = parse_structs(signatures)
-        assert "Invalid" in result
-        assert result["Invalid"] == [{"type": "uint256"}]
-
-    def test_struct_with_malformed_properties(self):
-        """Test struct with malformed properties raises error."""
-        signatures = ["struct Invalid { uint256 x uint256 y; }"]  # Missing semicolon
-
-        with pytest.raises(ValueError, match="Invalid parameter"):
-            parse_structs(signatures)
-
-    def test_struct_with_empty_properties(self):
-        """Test struct with empty properties raises error."""
-        signatures = ["struct Invalid { }"]
-
-        with pytest.raises(ValueError, match="Invalid struct signature"):
-            parse_structs(signatures)
-
-    def test_struct_with_only_semicolons(self):
-        """Test struct with only semicolons raises error."""
-        signatures = ["struct Invalid { ; ; }"]
-
-        with pytest.raises(ValueError, match="Invalid struct signature"):
+    @pytest.mark.parametrize(
+        "signatures, expected_error",
+        [
+            # Circular reference
+            (
+                ["struct A { B b; }", "struct B { A a; }"],
+                "Circular reference detected",
+            ),
+            # Invalid struct signature - empty
+            (
+                ["struct Invalid { }"],
+                "Invalid struct signature",
+            ),
+            # Invalid struct signature - only semicolons
+            (
+                ["struct Invalid { ; ; }"],
+                "Invalid struct signature",
+            ),
+            # Unknown type
+            (
+                ["struct Invalid { unknown_type field; }"],
+                "Unknown type",
+            ),
+            # Malformed properties - missing semicolon
+            (
+                ["struct Invalid { uint256 x uint256 y; }"],
+                "Invalid parameter",
+            ),
+        ],
+    )
+    def test_invalid_struct_parsing(self, signatures, expected_error):
+        """Test invalid struct parsing cases that raise errors."""
+        with pytest.raises(ValueError, match=expected_error):
             parse_structs(signatures)
 
 
 class TestParseABI:
     """Test top-level ABI parsing functionality."""
 
-    def test_basic_abi(self):
-        """Test parsing basic ABI without structs."""
-        signatures = [
-            "function transfer(address to, uint256 amount)",
-            "event Transfer(address indexed from, address indexed to, uint256 value)",
-            "error InsufficientBalance(uint256 available, uint256 required)",
-        ]
+    @pytest.mark.parametrize(
+        "signatures, expected_abi_length, expected_types",
+        [
+            # Basic ABI without structs
+            (
+                [
+                    "function transfer(address to, uint256 amount)",
+                    "event Transfer(address indexed from, address indexed to, "
+                    "uint256 value)",
+                    "error InsufficientBalance(uint256 available, uint256 required)",
+                ],
+                3,
+                {"function", "event", "error"},
+            ),
+            # Mixed ABI elements
+            (
+                [
+                    "struct User { string name; address addr; }",
+                    "function transfer(address to, uint256 amount)",
+                    "event Transfer(address indexed from, address indexed to, "
+                    "uint256 value)",
+                    "error InsufficientBalance(uint256 available, uint256 required)",
+                    "constructor(string name, string symbol)",
+                    "fallback() external",
+                    "receive() external payable",
+                ],
+                6,  # struct is excluded
+                {"function", "event", "error", "constructor", "fallback", "receive"},
+            ),
+        ],
+    )
+    def test_valid_abi_parsing(self, signatures, expected_abi_length, expected_types):
+        """Test valid ABI parsing cases."""
+        abi = parse_abi(signatures)
+        assert len(abi) == expected_abi_length
+        types = {item["type"] for item in abi}
+        assert types == expected_types
 
+    @pytest.mark.parametrize(
+        "signatures, expected_error",
+        [
+            # Empty signatures
+            ([], "At least one signature required"),
+        ],
+    )
+    def test_invalid_abi_parsing(self, signatures, expected_error):
+        """Test invalid ABI parsing cases that raise errors."""
+        with pytest.raises(ValueError, match=expected_error):
+            parse_abi(signatures)
+
+    @pytest.mark.parametrize(
+        "signatures, expected_name, expected_inputs, expected_outputs",
+        [
+            # ABI with structs
+            (
+                [
+                    "struct Point { uint256 x; uint256 y; }",
+                    "function setPoint(Point p)",
+                    "function getPoint() returns (Point)",
+                    "event PointSet(Point point)",
+                ],
+                "setPoint",
+                [
+                    {
+                        "type": "tuple",
+                        "name": "p",
+                        "components": [
+                            {"type": "uint256", "name": "x"},
+                            {"type": "uint256", "name": "y"},
+                        ],
+                    }
+                ],
+                None,
+            ),
+            # ABI with struct arrays
+            (
+                [
+                    "struct Point { uint256 x; uint256 y; }",
+                    "function setPoints(Point[] points)",
+                ],
+                "setPoints",
+                [
+                    {
+                        "type": "tuple[]",
+                        "name": "points",
+                        "components": [
+                            {"type": "uint256", "name": "x"},
+                            {"type": "uint256", "name": "y"},
+                        ],
+                    }
+                ],
+                None,
+            ),
+        ],
+    )
+    def test_abi_with_structs(
+        self, signatures, expected_name, expected_inputs, expected_outputs
+    ):
+        """Test ABI parsing with struct definitions."""
         abi = parse_abi(signatures)
 
-        assert len(abi) == 3
-        assert abi[0]["type"] == "function"
-        assert abi[1]["type"] == "event"
-        assert abi[2]["type"] == "error"
+        # Find the function by name
+        func = next(item for item in abi if item.get("name") == expected_name)
 
-    def test_abi_with_structs(self):
-        """Test parsing ABI with struct definitions."""
-        signatures = [
-            "struct Point { uint256 x; uint256 y; }",
-            "function setPoint(Point p)",
-            "function getPoint() returns (Point)",
-            "event PointSet(Point point)",
-        ]
+        # Check inputs
+        if expected_inputs is not None:
+            assert func["inputs"] == expected_inputs
 
-        abi = parse_abi(signatures)
-
-        # Struct should not be in final ABI
-        assert len(abi) == 3
-
-        # Check function with struct parameter
-        set_point = next(item for item in abi if item["name"] == "setPoint")
-        assert set_point["inputs"] == [
-            {
-                "type": "tuple",
-                "name": "p",
-                "components": [
-                    {"type": "uint256", "name": "x"},
-                    {"type": "uint256", "name": "y"},
-                ],
-            }
-        ]
-
-        # Check function with struct return
-        get_point = next(item for item in abi if item["name"] == "getPoint")
-        assert get_point["outputs"] == [
-            {
-                "type": "tuple",
-                "components": [
-                    {"type": "uint256", "name": "x"},
-                    {"type": "uint256", "name": "y"},
-                ],
-            }
-        ]
+        # Check outputs
+        if expected_outputs is not None:
+            assert func["outputs"] == expected_outputs
 
     def test_abi_with_nested_structs(self):
         """Test parsing ABI with nested structs."""
@@ -1255,130 +1409,114 @@ class TestParseABI:
             }
         ]
 
-    def test_abi_with_struct_arrays(self):
-        """Test parsing ABI with struct arrays."""
-        signatures = [
-            "struct Point { uint256 x; uint256 y; }",
-            "function setPoints(Point[] points)",
-        ]
-
-        abi = parse_abi(signatures)
-
-        assert len(abi) == 1
-        set_points = abi[0]
-        assert set_points["inputs"] == [
-            {
-                "type": "tuple[]",
-                "name": "points",
-                "components": [
-                    {"type": "uint256", "name": "x"},
-                    {"type": "uint256", "name": "y"},
-                ],
-            }
-        ]
-
-    def test_empty_signatures(self):
-        """Test empty signatures list raises error."""
-        with pytest.raises(ValueError, match="At least one signature required"):
-            parse_abi([])
-
-    def test_mixed_abi_elements(self):
-        """Test parsing mixed ABI elements."""
-        signatures = [
-            "struct User { string name; address addr; }",
-            "function transfer(address to, uint256 amount)",
-            "event Transfer(address indexed from, address indexed to, uint256 value)",
-            "error InsufficientBalance(uint256 available, uint256 required)",
-            "constructor(string name, string symbol)",
-            "fallback() external",
-            "receive() external payable",
-        ]
-
-        abi = parse_abi(signatures)
-
-        # Should have 6 elements (struct is excluded)
-        assert len(abi) == 6
-
-        # Verify all types are present
-        types = {item["type"] for item in abi}
-        assert types == {
-            "function",
-            "event",
-            "error",
-            "constructor",
-            "fallback",
-            "receive",
-        }
-
-    def test_struct_regex_pattern(self):
+    @pytest.mark.parametrize(
+        "signature, expected_name, expected_properties",
+        [
+            # Valid struct signatures
+            (
+                "struct Point { uint256 x; uint256 y; }",
+                "Point",
+                "uint256 x; uint256 y;",
+            ),
+            (
+                "struct User { string name; address addr; }",
+                "User",
+                "string name; address addr;",
+            ),
+        ],
+    )
+    def test_struct_regex_pattern(self, signature, expected_name, expected_properties):
         """Test struct regex pattern matching."""
-        # Valid struct signatures
-        match = STRUCT_SIGNATURE_REGEX.match("struct Point { uint256 x; uint256 y; }")
+        match = STRUCT_SIGNATURE_REGEX.match(signature)
         assert match is not None
-        assert match.group("name") == "Point"
-        assert match.group("properties").strip() == "uint256 x; uint256 y;"
+        assert match.group("name") == expected_name
+        assert match.group("properties").strip() == expected_properties
 
-        match = STRUCT_SIGNATURE_REGEX.match(
-            "struct User { string name; address addr; }"
-        )
-        assert match is not None
-        assert match.group("name") == "User"
-
-        # Invalid struct signatures
-        assert STRUCT_SIGNATURE_REGEX.match("function test()") is None
-        assert STRUCT_SIGNATURE_REGEX.match("struct Point") is None
+    @pytest.mark.parametrize(
+        "signature",
+        [
+            # Invalid struct signatures
+            "function test()",
+            "struct Point",
+        ],
+    )
+    def test_struct_regex_pattern_invalid(self, signature):
+        """Test struct regex pattern with invalid signatures."""
+        assert STRUCT_SIGNATURE_REGEX.match(signature) is None
 
 
 class TestEdgeCases:
     """Test edge cases and boundary conditions."""
 
-    def test_parameter_with_very_long_name(self):
-        """Test parameter with very long name."""
-        long_name = "a" * 100
-        result = parse_abi_parameter(f"uint256 {long_name}")
-        assert result["name"] == long_name
+    @pytest.mark.parametrize(
+        "parameter_str, expected_type, expected_name",
+        [
+            # Very long name
+            ("uint256 " + "a" * 100, "uint256", "a" * 100),
+            # Very long type
+            ("a" * 100 + " name", "a" * 100, "name"),
+            # Special characters in name (valid)
+            ("uint256 _name$123", "uint256", "_name$123"),
+            # Large array dimensions
+            ("uint256[999999999999999999]", "uint256[999999999999999999]", None),
+            # Deeply nested arrays
+            ("uint256[][][][][][]", "uint256[][][][][][]", None),
+            # Newlines in parameter
+            ("uint256\namount", "uint256", "amount"),
+            # Only modifier
+            ("indexed", "indexed", None),
+            # Only name
+            ("amount", "amount", None),
+            # Only type
+            ("uint256", "uint256", None),
+            # Deep nesting
+            ("((((uint256))))", "tuple", None),
+            # Mixed nesting
+            ("((uint256,address),(bool,string))", "tuple", None),
+        ],
+    )
+    def test_edge_case_parameter_parsing(
+        self, parameter_str, expected_type, expected_name
+    ):
+        """Test edge case parameter parsing."""
+        result = parse_abi_parameter(parameter_str)
+        assert result["type"] == expected_type
+        if expected_name is not None:
+            assert result["name"] == expected_name
 
-    def test_parameter_with_very_long_type(self):
-        """Test parameter with very long type name."""
-        long_type = "a" * 100
-        # This actually parses successfully - the long string is treated as a type
-        result = parse_abi_parameter(f"{long_type} name")
-        assert result["type"] == long_type
-        assert result["name"] == "name"
+    @pytest.mark.parametrize(
+        "parameter_str, expected_error",
+        [
+            # Invalid identifier characters
+            ("uint256 name-with-dash", "Invalid parameter"),
+            # Leading/trailing spaces
+            ("  uint256   amount  ", "Invalid parameter"),
+            # Tabs
+            ("\tuint256\tamount\t", "Invalid parameter"),
+            # Empty string
+            ("", "Invalid parameter"),
+            # Only spaces
+            ("   ", "Invalid parameter"),
+        ],
+    )
+    def test_invalid_edge_case_parameter_parsing(self, parameter_str, expected_error):
+        """Test invalid edge case parameter parsing that raises errors."""
+        with pytest.raises(ValueError, match=expected_error):
+            parse_abi_parameter(parameter_str)
 
-    def test_empty_struct_name(self):
-        """Test struct with empty name raises error."""
-        signatures = ["struct  { uint256 x; }"]
-        # This actually parses successfully but creates an empty struct dict
+    @pytest.mark.parametrize(
+        "signatures, expected_structs",
+        [
+            # Empty struct name
+            (["struct  { uint256 x; }"], {}),
+            # Invalid struct name
+            (["struct 123Invalid { uint256 x; }"], {}),
+        ],
+    )
+    def test_edge_case_struct_parsing(self, signatures, expected_structs):
+        """Test edge case struct parsing."""
         result = parse_structs(signatures)
-        assert result == {}
-
-    def test_struct_with_invalid_name(self):
-        """Test struct with invalid name raises error."""
-        signatures = ["struct 123Invalid { uint256 x; }"]
-        # This actually parses successfully but creates an empty struct dict
-        result = parse_structs(signatures)
-        assert result == {}
-
-    def test_parameter_with_special_characters(self):
-        """Test parameter with special characters in name."""
-        # Valid identifier characters
-        result = parse_abi_parameter("uint256 _name$123")
-        assert result["name"] == "_name$123"
-
-        # Invalid identifier characters
-        with pytest.raises(ValueError, match="Invalid parameter"):
-            parse_abi_parameter("uint256 name-with-dash")
-
-    def test_array_with_large_dimensions(self):
-        """Test array with large dimensions."""
-        result = parse_abi_parameter("uint256[999999999999999999]")
-        assert result["type"] == "uint256[999999999999999999]"
-
-    def test_nested_arrays(self):
-        """Test deeply nested arrays."""
-        result = parse_abi_parameter("uint256[][][][][][]")
-        assert result["type"] == "uint256[][][][][][]"
+        assert result == expected_structs
 
     def test_parameter_cache_behavior(self):
         """Test parameter cache behavior with identical parameters."""
@@ -1410,56 +1548,3 @@ class TestEdgeCases:
 
         # Should be different objects due to different struct contexts
         assert param1 is not param2
-
-    def test_whitespace_handling(self):
-        """Test various whitespace handling."""
-        # Leading/trailing spaces cause the regex to fail
-        with pytest.raises(ValueError, match="Invalid parameter"):
-            parse_abi_parameter("  uint256   amount  ")
-
-        # Tabs also cause the regex to fail
-        with pytest.raises(ValueError, match="Invalid parameter"):
-            parse_abi_parameter("\tuint256\tamount\t")
-
-        # Newlines actually parse successfully - treated as type "uint256"
-        # and name "amount"
-        result = parse_abi_parameter("uint256\namount")
-        assert result["type"] == "uint256"
-        assert result["name"] == "amount"
-
-    def test_empty_strings(self):
-        """Test empty string inputs."""
-        with pytest.raises(ValueError, match="Invalid parameter"):
-            parse_abi_parameter("")
-
-        with pytest.raises(ValueError, match="Invalid parameter"):
-            parse_abi_parameter("   ")
-
-    def test_only_modifier(self):
-        """Test parameter with only modifier."""
-        # This actually parses successfully - "indexed" is treated as a type
-        result = parse_abi_parameter("indexed")
-        assert result["type"] == "indexed"
-
-    def test_only_name(self):
-        """Test parameter with only name."""
-        # This actually parses successfully - "amount" is treated as a type
-        result = parse_abi_parameter("amount")
-        assert result["type"] == "amount"
-
-    def test_only_type(self):
-        """Test parameter with only type."""
-        result = parse_abi_parameter("uint256")
-        assert result == {"type": "uint256"}
-
-    def test_complex_nested_tuples(self):
-        """Test complex nested tuple structures."""
-        # Deep nesting
-        result = parse_abi_parameter("((((uint256))))")
-        assert result["type"] == "tuple"
-        assert len(result["components"]) == 1
-
-        # Mixed nesting
-        result = parse_abi_parameter("((uint256,address),(bool,string))")
-        assert result["type"] == "tuple"
-        assert len(result["components"]) == 2
