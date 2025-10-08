@@ -103,15 +103,6 @@ class TestParseABIParameter:
             ("int", {"type": "int256"}),
             # Address payable
             ("address payable", {"type": "address"}),
-        ],
-    )
-    def test_basic_parameter_parsing(self, input_str, expected):
-        """Test basic parameter parsing cases."""
-        assert parse_abi_parameter(input_str) == expected
-
-    @pytest.mark.parametrize(
-        "input_str, expected",
-        [
             # Tuple types
             (
                 "(uint256,address)",
@@ -120,15 +111,6 @@ class TestParseABIParameter:
                     "components": [{"type": "uint256"}, {"type": "address"}],
                 },
             ),
-        ],
-    )
-    def test_tuple_parameter_parsing(self, input_str, expected):
-        """Test tuple parameter parsing cases."""
-        assert parse_abi_parameter(input_str) == expected
-
-    @pytest.mark.parametrize(
-        "input_str, expected",
-        [
             # All Solidity types with named parameters
             ("bool isActive", {"type": "bool", "name": "isActive"}),
             ("address owner", {"type": "address", "name": "owner"}),
@@ -142,15 +124,6 @@ class TestParseABIParameter:
             ("fixed256x80 rate", {"type": "fixed256x80", "name": "rate"}),
             ("bytes1 flag", {"type": "bytes1", "name": "flag"}),
             ("bytes32 hash", {"type": "bytes32", "name": "hash"}),
-        ],
-    )
-    def test_all_solidity_types(self, input_str, expected):
-        """Test parsing all Solidity ABI types with named parameters."""
-        assert parse_abi_parameter(input_str) == expected
-
-    @pytest.mark.parametrize(
-        "input_str, expected",
-        [
             # Complex array types
             ("uint256[] amounts", {"type": "uint256[]", "name": "amounts"}),
             ("address[10] recipients", {"type": "address[10]", "name": "recipients"}),
@@ -158,15 +131,6 @@ class TestParseABIParameter:
             ("address[][5] lists", {"type": "address[][5]", "name": "lists"}),
             ("string[] names", {"type": "string[]", "name": "names"}),
             ("bytes32[] hashes", {"type": "bytes32[]", "name": "hashes"}),
-        ],
-    )
-    def test_complex_array_types(self, input_str, expected):
-        """Test complex array types with named parameters."""
-        assert parse_abi_parameter(input_str) == expected
-
-    @pytest.mark.parametrize(
-        "input_str, expected",
-        [
             # Nested tuples
             (
                 "(uint256,address) pair",
@@ -190,15 +154,6 @@ class TestParseABIParameter:
                     ],
                 },
             ),
-        ],
-    )
-    def test_nested_tuples(self, input_str, expected):
-        """Test nested tuple types with named parameters."""
-        assert parse_abi_parameter(input_str) == expected
-
-    @pytest.mark.parametrize(
-        "input_str, expected",
-        [
             # Array of tuples
             (
                 "(uint256,address)[] pairs",
@@ -240,8 +195,8 @@ class TestParseABIParameter:
             ),
         ],
     )
-    def test_array_of_tuples(self, input_str, expected):
-        """Test array of tuple types."""
+    def test_basic_parameter_parsing(self, input_str, expected):
+        """Test basic parameter parsing cases."""
         assert parse_abi_parameter(input_str) == expected
 
     @pytest.mark.parametrize(
