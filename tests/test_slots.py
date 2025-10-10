@@ -11,7 +11,11 @@ from hexbytes import HexBytes
 from web3 import AsyncHTTPProvider, AsyncWeb3
 
 from eth_contract.erc20 import ERC20
-from eth_contract.slots import parse_allowance_slot, parse_balance_slot
+from eth_contract.slots import (
+    parse_allowance_slot,
+    parse_balance_slot,
+    parse_supply_slot,
+)
 
 from .conftest import ETH_MAINNET_FORK
 from .trace import trace_call
@@ -40,6 +44,43 @@ async def test_pyrevm_balance_slot_tracing():
     assert int.from_bytes(bz, "big") == await fn.call(
         w3, to=token, state_override={token: {"stateDiff": state}}
     )
+
+
+@pytest.mark.asyncio
+async def test_pyrevm_supply_slot_tracing():
+    """Test supply slot detection with pyrevm tracing"""
+    tokens = [
+        ("WETH", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
+        ("UNI", "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"),
+        ("AAVE", "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9"),
+        ("MKR", "0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2"),
+    ]
+    fn = ERC20.fns.totalSupply()
+    # Capture and parse traces
+    vm = pyrevm.EVM(fork_url=ETH_MAINNET_FORK, tracing=True, with_memory=True)
+    w3 = AsyncWeb3(AsyncHTTPProvider(ETH_MAINNET_FORK))
+    for name, token in tokens:
+        print("Testing", name, token)
+        traces = trace_call(vm, to=token, data=fn.data)
+
+        # Parse totalSupply slot from traces
+        slot = parse_supply_slot(HexBytes(token), traces)
+        bz = os.urandom(16).rjust(32, b"\x00")
+        new_balance = int.from_bytes(bz, "big")
+        if not slot:
+            # WETH case: totalSupply = address(this).balance
+            assert await fn.call(w3, to=token) == await w3.eth.get_balance(token)
+            # verify the slot with state overrides
+            assert new_balance == await fn.call(
+                w3, to=token, state_override={token: {"balance": hex(new_balance)}}
+            )
+        else:
+            # Storage-based tokens: override storage slot
+            # verify the slot with state overrides
+            state = {to_hex(slot.slot): to_hex(bz)}
+            assert new_balance == await fn.call(
+                w3, to=token, state_override={token: {"stateDiff": state}}
+            )
 
 
 @pytest.mark.asyncio

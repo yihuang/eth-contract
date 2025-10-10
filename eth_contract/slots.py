@@ -283,3 +283,69 @@ def parse_batch_balance_slot(
             result[contract] = MappingSlot(v0, False)
 
     return result
+
+
+def parse_supply_slot(token: bytes, traces: Iterable[dict]) -> MappingSlot | None:
+    """
+    detect the supply slot of token contract with a `totalSupply()` trace result
+    totalSupply is typically stored as a simple storage variable (slot 0-100),
+    so we look for SLOAD operations on small slot numbers.
+    """
+    # stack to track current calling contract, `depth -> contract address`
+    contracts: dict[int, bytes] = {1: token}
+
+    # Track which slots are results of KECCAK256 (mapping slots) - we want to skip these
+    mapping_slots: set[bytes] = set()
+    tmp_pre_image: tuple[bytes, bytes] | None = None
+
+    simple_slots = []  # Collect simple slots
+
+    for step in traces:
+        if "stack" not in step:
+            continue
+
+        stack = step["stack"]
+        op = get_op_name(step)
+
+        # Track KECCAK256 results as mapping slots (to skip them)
+        if tmp_pre_image is not None:
+            mapping_slots.add(HexBytes(stack[-1]))
+            tmp_pre_image = None
+
+        if op == "KECCAK256":
+            # Mark that the next stack top will be a mapping slot
+            size, offset = int(stack[-2], 16), int(stack[-1], 16)
+            if size == 64:  # Standard mapping hash
+                mem = get_memory(step)[offset : offset + 64]
+                tmp_pre_image = mem[:32], mem[32:]
+        elif op == "SLOAD":
+            contract = contracts[step["depth"]]
+            if contract != token:
+                continue
+
+            slot_bytes = HexBytes(stack[-1])
+
+            # Skip mapping slots - we want simple storage variables
+            if slot_bytes not in mapping_slots:
+                slot_int = int(slot_bytes.hex(), 16)
+                # totalSupply is usually in slots 0-100 for simple contracts
+                if slot_int < 1000:
+                    simple_slots.append((slot_int, slot_bytes))
+        elif op in ("CALL", "STATICCALL"):
+            contracts[step["depth"] + 1] = HexBytes(stack[-2])[-20:]
+        elif op == "DELEGATECALL":
+            depth = step["depth"]
+            contracts[depth + 1] = contracts[depth]
+
+    # Return the smallest slot number (most likely to be totalSupply)
+    if simple_slots:
+        simple_slots.sort()
+        slot_bytes = simple_slots[0][1]
+
+        # Ensure slot_bytes is 32 bytes
+        if len(slot_bytes) < 32:
+            slot_bytes = HexBytes(slot_bytes.rjust(32, b"\x00"))
+
+        return MappingSlot(slot_bytes, True)
+
+    return None
