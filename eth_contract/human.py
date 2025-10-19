@@ -13,6 +13,11 @@ from eth_typing import (
     ABIReceive,
 )
 
+
+class ExtendedComponent(ABIComponentIndexed):
+    internalType: str | None
+
+
 IDENTIFIER = r"[a-zA-Z$_][a-zA-Z0-9$_]*"
 ARRAY = r"(\[\d*\])+"
 SIGNATURE_PREFIX = re.compile(r"^(function|event|error|constructor|fallback|receive)")
@@ -150,7 +155,7 @@ FUNCTION_MODIFIERS = {"calldata", "memory", "storage"}
 ALL_MODIFIERS = {"indexed", "calldata", "memory", "storage"}
 
 # Parameter cache
-parameter_cache: dict[str, ABIComponentIndexed] = {}
+parameter_cache: dict[str, ExtendedComponent] = {}
 
 # struct signature regex
 STRUCT_SIGNATURE_REGEX = re.compile(
@@ -169,13 +174,13 @@ def is_struct_signature(signature: str) -> bool:
     return STRUCT_SIGNATURE_REGEX.match(signature) is not None
 
 
-def parse_structs(signatures: list[str]) -> dict[str, list[ABIComponentIndexed]]:
+def parse_structs(signatures: list[str]) -> dict[str, list[ExtendedComponent]]:
     """
     Parse struct definitions from a list of signatures.
     Returns a StructLookup mapping struct names to their components.
     """
     # First pass: create shallow structs (without resolving nested struct references)
-    shallow_structs: dict[str, list[ABIComponentIndexed]] = {}
+    shallow_structs: dict[str, list[ExtendedComponent]] = {}
 
     for signature in signatures:
         match = STRUCT_SIGNATURE_REGEX.match(signature)
@@ -202,7 +207,7 @@ def parse_structs(signatures: list[str]) -> dict[str, list[ABIComponentIndexed]]
         shallow_structs[name] = components
 
     # Second pass: resolve nested struct references
-    resolved_structs: dict[str, list[ABIComponentIndexed]] = {}
+    resolved_structs: dict[str, list[ExtendedComponent]] = {}
     for name, parameters in shallow_structs.items():
         resolved_structs[name] = _resolve_struct_components(
             parameters, shallow_structs, set()
@@ -212,10 +217,10 @@ def parse_structs(signatures: list[str]) -> dict[str, list[ABIComponentIndexed]]
 
 
 def _resolve_struct_components(
-    parameters: list[ABIComponentIndexed],
-    structs: dict[str, list[ABIComponentIndexed]],
+    parameters: list[ExtendedComponent],
+    structs: dict[str, list[ExtendedComponent]],
     ancestors: set[str],
-) -> list[ABIComponentIndexed]:
+) -> list[ExtendedComponent]:
     """
     Recursively resolve struct references in parameter components.
     Detects circular references.
@@ -253,6 +258,7 @@ def _resolve_struct_components(
                 {
                     **param,
                     "type": f"tuple{array_suffix}",
+                    "internalType": f"struct {base_type}{array_suffix}",
                     "components": resolved_components,
                 }
             )
@@ -338,9 +344,9 @@ def is_tuple(s):
 def parse_abi_parameter(
     param: str,
     modifiers: set[str] | None = None,
-    structs: dict[str, list[ABIComponentIndexed]] | None = None,
+    structs: dict[str, list[ExtendedComponent]] | None = None,
     abi_type: str | None = None,
-) -> ABIComponentIndexed:
+) -> ExtendedComponent:
     """Parse a single ABI parameter string into a structured object."""
     if structs is None:
         structs = {}
@@ -393,17 +399,21 @@ def parse_abi_parameter(
     # Add array suffix
     result["type"] = result["type"] + array
 
+    # Add internalType
+    if groups["type"] in structs:
+        result["internalType"] = f'struct {groups["type"]}{array}'
+
     # Validate modifier
     if modifier and modifiers and modifier not in modifiers:
         raise ValueError(f"Invalid modifier '{modifier}' for type {abi_type}")
 
-    comp = cast(ABIComponentIndexed, result)
+    comp = cast(ExtendedComponent, result)
     parameter_cache[cache_key] = comp
     return comp
 
 
 def parse_function_signature(
-    signature: str, structs: dict[str, list[ABIComponentIndexed]] | None = None
+    signature: str, structs: dict[str, list[ExtendedComponent]] | None = None
 ) -> ABIFunction:
     """Parse a function signature."""
     match = FUNCTION_SIGNATURE_REGEX.match(signature)
@@ -434,7 +444,7 @@ def parse_function_signature(
 
 
 def parse_event_signature(
-    signature: str, structs: dict[str, list[ABIComponentIndexed]] | None = None
+    signature: str, structs: dict[str, list[ExtendedComponent]] | None = None
 ) -> ABIEvent:
     """Parse an event signature."""
     match = EVENT_SIGNATURE_REGEX.match(signature)
@@ -454,7 +464,7 @@ def parse_event_signature(
 
 
 def parse_error_signature(
-    signature: str, structs: dict[str, list[ABIComponentIndexed]] | None = None
+    signature: str, structs: dict[str, list[ExtendedComponent]] | None = None
 ) -> ABIError:
     """Parse an error signature."""
     match = ERROR_SIGNATURE_REGEX.match(signature)
@@ -474,7 +484,7 @@ def parse_error_signature(
 
 
 def parse_constructor_signature(
-    signature: str, structs: dict[str, list[ABIComponentIndexed]] | None = None
+    signature: str, structs: dict[str, list[ExtendedComponent]] | None = None
 ) -> ABIConstructor:
     """Parse a constructor signature."""
     match = CONSTRUCTOR_SIGNATURE_REGEX.match(signature)
@@ -520,7 +530,7 @@ def parse_receive_signature(signature: str) -> ABIReceive:
 
 
 def parse_signature(
-    signature: str, structs: dict[str, list[ABIComponentIndexed]] | None = None
+    signature: str, structs: dict[str, list[ExtendedComponent]] | None = None
 ) -> ABIElement:
     """
     Parse any ABI signature and return the appropriate ABI item.
