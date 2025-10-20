@@ -876,6 +876,7 @@ class TestParseSignature:
                 {
                     "type": "tuple",
                     "name": "p",
+                    "internalType": "struct Point",
                     "components": [
                         {"type": "uint256", "name": "x"},
                         {"type": "uint256", "name": "y"},
@@ -1206,6 +1207,7 @@ class TestParseStructs:
             {
                 "type": "tuple",
                 "name": "start",
+                "internalType": "struct Point",
                 "components": [
                     {"type": "uint256", "name": "x"},
                     {"type": "uint256", "name": "y"},
@@ -1214,6 +1216,7 @@ class TestParseStructs:
             {
                 "type": "tuple",
                 "name": "end",
+                "internalType": "struct Point",
                 "components": [
                     {"type": "uint256", "name": "x"},
                     {"type": "uint256", "name": "y"},
@@ -1326,6 +1329,7 @@ class TestParseABI:
                     {
                         "type": "tuple",
                         "name": "p",
+                        "internalType": "struct Point",
                         "components": [
                             {"type": "uint256", "name": "x"},
                             {"type": "uint256", "name": "y"},
@@ -1345,6 +1349,7 @@ class TestParseABI:
                     {
                         "type": "tuple[]",
                         "name": "points",
+                        "internalType": "struct Point[]",
                         "components": [
                             {"type": "uint256", "name": "x"},
                             {"type": "uint256", "name": "y"},
@@ -1388,10 +1393,12 @@ class TestParseABI:
             {
                 "type": "tuple",
                 "name": "line",
+                "internalType": "struct Line",
                 "components": [
                     {
                         "type": "tuple",
                         "name": "start",
+                        "internalType": "struct Point",
                         "components": [
                             {"type": "uint256", "name": "x"},
                             {"type": "uint256", "name": "y"},
@@ -1400,6 +1407,7 @@ class TestParseABI:
                     {
                         "type": "tuple",
                         "name": "end",
+                        "internalType": "struct Point",
                         "components": [
                             {"type": "uint256", "name": "x"},
                             {"type": "uint256", "name": "y"},
