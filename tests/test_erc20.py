@@ -21,12 +21,12 @@ from eth_contract.utils import (
     balance_of,
     get_initcode,
     send_transaction,
+    trace_call,
 )
 from eth_contract.weth import WETH
 
 from .conftest import ETH_MAINNET_FORK, MULTICALL3ROUTER
 from .contracts import WETH_ADDRESS, MockERC20_ARTIFACT, MULTICALL3ROUTER_ARTIFACT
-from .trace import trace_call
 
 
 @pytest.mark.asyncio
@@ -266,11 +266,12 @@ async def test_7702(w3, test_accounts):
 
 
 def test_pyrevm_trace():
-    vm = pyrevm.EVM(fork_url=ETH_MAINNET_FORK, tracing=True, with_memory=True)
     addr = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"  # USDC
     whale = "0x37305B1cD40574E4C5Ce33f8e8306Be057fD7341"
 
-    for trace in trace_call(vm, data=ERC20.fns.balanceOf(whale).data, to=addr):
+    for trace in trace_call(
+        ETH_MAINNET_FORK, data=ERC20.fns.balanceOf(whale).data, to=addr
+    ):
         if trace.get("opName") == "SLOAD":
             print(trace)
 
@@ -282,11 +283,10 @@ def test_pyrevm_trace_log():
     deposit_fn = "Deposit(address,uint256)"
     deposit_hash = f"0x{keccak(deposit_fn.encode()).hex()}"
 
-    vm = pyrevm.EVM(fork_url=ETH_MAINNET_FORK, tracing=True, with_memory=True)
     account_info = pyrevm.AccountInfo(balance=100 * 10**18)
-    vm.insert_account_info(whale, account_info)
     for trace in trace_call(
-        vm,
+        ETH_MAINNET_FORK,
+        setup_vm=lambda vm: vm.insert_account_info(whale, account_info),
         **{
             "from": whale,
             "to": WETH_ADDRESS,

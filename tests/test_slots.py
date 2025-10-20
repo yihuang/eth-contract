@@ -4,7 +4,6 @@ Test for slots module using pyrevm with memory tracing.
 
 import os
 
-import pyrevm
 import pytest
 from eth_utils import to_hex
 from hexbytes import HexBytes
@@ -14,7 +13,7 @@ from eth_contract.erc20 import ERC20
 from eth_contract.slots import parse_allowance_slot, parse_balance_slot
 
 from .conftest import ETH_MAINNET_FORK
-from .trace import trace_call
+from eth_contract.utils import trace_call
 
 
 @pytest.mark.asyncio
@@ -26,8 +25,7 @@ async def test_pyrevm_balance_slot_tracing():
     fn = ERC20.fns.balanceOf(user)
 
     # Capture and parse traces
-    vm = pyrevm.EVM(fork_url=ETH_MAINNET_FORK, tracing=True, with_memory=True)
-    traces = trace_call(vm, to=token, data=fn.data)
+    traces = trace_call(ETH_MAINNET_FORK, to=token, data=fn.data)
 
     # Parse balance slot from traces
     slot = parse_balance_slot(HexBytes(token), user, traces)
@@ -53,7 +51,7 @@ async def test_pyrevm_allowance_slot_tracing():
 
     # Capture and parse traces
     traces = trace_call(
-        pyrevm.EVM(fork_url=ETH_MAINNET_FORK, tracing=True, with_memory=True),
+        ETH_MAINNET_FORK,
         to=token,
         data=fn.data,
     )
