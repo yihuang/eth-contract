@@ -283,6 +283,8 @@ def test_pyrevm_trace_log():
     deposit_hash = f"0x{keccak(deposit_fn.encode()).hex()}"
 
     vm = pyrevm.EVM(fork_url=ETH_MAINNET_FORK, tracing=True, with_memory=True)
+    account_info = pyrevm.AccountInfo(balance=100 * 10**18)
+    vm.insert_account_info(whale, account_info)
     for trace in trace_call(
         vm,
         **{
