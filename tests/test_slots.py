@@ -66,19 +66,19 @@ async def test_pyrevm_supply_slot_tracing():
         # Parse totalSupply slot from traces
         slot = parse_supply_slot(HexBytes(token), traces)
         bz = os.urandom(16).rjust(32, b"\x00")
-        new_balance = int.from_bytes(bz, "big")
+        new_total = int.from_bytes(bz, "big")
         if not slot:
             # WETH case: totalSupply = address(this).balance
             assert await fn.call(w3, to=token) == await w3.eth.get_balance(token)
             # verify the slot with state overrides
-            assert new_balance == await fn.call(
-                w3, to=token, state_override={token: {"balance": hex(new_balance)}}
+            assert new_total == await fn.call(
+                w3, to=token, state_override={token: {"balance": hex(new_total)}}
             )
         else:
             # Storage-based tokens: override storage slot
             # verify the slot with state overrides
             state = {to_hex(slot.slot): to_hex(bz)}
-            assert new_balance == await fn.call(
+            assert new_total == await fn.call(
                 w3, to=token, state_override={token: {"stateDiff": state}}
             )
 
