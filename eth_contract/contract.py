@@ -24,7 +24,8 @@ from eth_utils.toolz import assoc, merge
 from hexbytes import HexBytes
 from typing_extensions import Unpack
 from web3 import AsyncWeb3
-from web3._utils.events import get_event_data
+from web3._utils.events import AsyncEventFilterBuilder, get_event_data
+from web3._utils.filters import AsyncLogFilter, construct_event_filter_params
 from web3.exceptions import MismatchedABI
 from web3.types import (
     BlockIdentifier,
@@ -163,6 +164,7 @@ class ContractFunction:
 @dataclass
 class ContractEvent:
     abi: ABIEvent
+    parent: Contract | None = None
 
     def __post_init__(self):
         self.signature = abi_to_signature(self.abi)
@@ -184,6 +186,58 @@ class ContractEvent:
             return get_event_data(ABICodec(default_registry), self.abi, log)
         except MismatchedABI:
             return None
+
+    async def create_filter(
+        self,
+        w3: AsyncWeb3,
+        *,  # PEP 3102
+        argument_filters: dict[str, Any] | None = None,
+        from_block: BlockIdentifier | None = None,
+        to_block: BlockIdentifier = "latest",
+        address: ChecksumAddress | None = None,
+        topics: Sequence[Any] | None = None,
+    ) -> AsyncLogFilter:
+        """
+        Create filter object that tracks logs emitted by this contract event.
+        """
+        if from_block is None:
+            from web3.exceptions import Web3TypeError
+            raise Web3TypeError(
+                "Missing mandatory keyword argument to create_filter: `from_block`"
+            )
+
+        if argument_filters is None:
+            argument_filters = {}
+
+        _filters = dict(**argument_filters)
+        
+        # Get the contract address from parent if not provided
+        contract_address = address
+        if contract_address is None and self.parent is not None:
+            contract_address = self.parent.tx.get('to')
+
+        _, event_filter_params = construct_event_filter_params(
+            self.abi,
+            w3.codec,
+            contract_address=contract_address,
+            argument_filters=_filters,
+            from_block=from_block,
+            to_block=to_block,
+            address=address,
+            topics=topics,
+        )
+
+        filter_builder = AsyncEventFilterBuilder(self.abi, w3.codec)
+        filter_builder.address = event_filter_params.get("address")
+        filter_builder.from_block = event_filter_params.get("fromBlock")
+        filter_builder.to_block = event_filter_params.get("toBlock")
+        filter_builder.topics = event_filter_params.get("topics")
+        
+        log_filter = await filter_builder.deploy(w3)
+        log_filter.log_entry_formatter = get_event_data(w3.codec, self.abi)
+        log_filter.builder = filter_builder
+
+        return log_filter
 
 
 @dataclass
@@ -209,6 +263,7 @@ class ContractFunctions:
 @dataclass
 class ContractEvents:
     abis: Sequence[ABIEvent]
+    parent: Contract | None = None
 
     def __getattr__(self, name: str) -> ContractEvent:
         candidates = filter_abi_by_name(name, self.abis)
@@ -216,12 +271,12 @@ class ContractEvents:
             raise ValueError(f"No such event: {name}")
         if len(candidates) > 1:
             raise ValueError(f"Multiple events found with name: {name}")
-        return ContractEvent(cast(ABIEvent, candidates[0]))
+        return ContractEvent(cast(ABIEvent, candidates[0]), parent=self.parent)
 
     def sig(self, signature: str) -> ContractEvent:
         for abi in self.abis:
             if abi_to_signature(abi) == signature:
-                return ContractEvent(abi)
+                return ContractEvent(abi, parent=self.parent)
         raise ValueError(f"No such event signature: {signature}")
 
 
@@ -239,7 +294,7 @@ class Contract:
             abis[fn["name"]].append(fn)
         self.fns = ContractFunctions(abis, self)
 
-        self.events = ContractEvents(filter_abi_by_type("event", self.abi))
+        self.events = ContractEvents(filter_abi_by_type("event", self.abi), parent=self)
 
         self.constructor: ContractConstructor | None = None
         ctor = filter_abi_by_type("constructor", self.abi)
