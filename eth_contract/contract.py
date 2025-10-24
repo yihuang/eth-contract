@@ -170,7 +170,6 @@ class ContractEvent:
 
     def __post_init__(self) -> None:
         self.signature = abi_to_signature(self.abi)
-        self.input_types = get_abi_input_types(self.abi)
         self._topic = None
 
     @property
