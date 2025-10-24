@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import warnings
 from collections import defaultdict
 from copy import copy
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence, cast
+from typing import Any, Iterable, Mapping, Sequence, cast
 
 from eth_abi import encode
 from eth_abi.codec import ABICodec
+from eth_abi.exceptions import InsufficientDataBytes
 from eth_abi.registry import registry as default_registry
 from eth_account.signers.base import BaseAccount
 from eth_typing import ABI, ABIConstructor, ABIEvent, ABIFunction, ChecksumAddress
@@ -26,7 +28,13 @@ from typing_extensions import Unpack
 from web3 import AsyncWeb3
 from web3._utils.events import AsyncEventFilterBuilder, get_event_data
 from web3._utils.filters import AsyncLogFilter, construct_event_filter_params
-from web3.exceptions import MismatchedABI
+from web3.exceptions import (
+    InvalidEventABI,
+    LogTopicError, 
+    MismatchedABI, 
+    Web3AttributeError
+)
+from web3.logs import DISCARD, IGNORE, STRICT, WARN, EventLogErrorFlags
 from web3.types import (
     BlockIdentifier,
     EventData,
@@ -35,6 +43,7 @@ from web3.types import (
     TxParams,
     TxReceipt,
 )
+from web3.datastructures import AttributeDict, MutableAttributeDict
 from web3.utils.abi import (
     _mismatched_abi_error_diagnosis,
     check_if_arguments_can_be_encoded,
@@ -186,6 +195,56 @@ class ContractEvent:
             return get_event_data(ABICodec(default_registry), self.abi, log)
         except MismatchedABI:
             return None
+
+    def __call__(self) -> "ContractEvent":
+        """
+        To match web3.py behavior to avoid creating a new instance.
+        """
+        return self
+
+    def process_receipt(
+        self, txn_receipt: TxReceipt, errors: EventLogErrorFlags = WARN
+    ) -> Iterable[EventData]:
+        return list(self._parse_logs(txn_receipt=txn_receipt, errors=errors))
+
+    def _parse_logs(
+        self, txn_receipt: TxReceipt, errors: EventLogErrorFlags
+    ) -> Iterable[EventData]:
+        try:
+            errors.name
+        except AttributeError:
+            raise Web3AttributeError(
+                f"Error flag must be one of: {EventLogErrorFlags.flag_options()}"
+            )
+
+        for log in txn_receipt["logs"]:
+            try:
+                rich_log = get_event_data(ABICodec(default_registry), self.abi, log)
+            except (
+                MismatchedABI,
+                LogTopicError,
+                InvalidEventABI,
+                TypeError,
+                InsufficientDataBytes,
+            ) as e:
+                if errors == DISCARD:
+                    continue
+                elif errors == IGNORE:
+                    new_log = MutableAttributeDict(log)
+                    new_log["errors"] = e
+                    rich_log = AttributeDict(new_log)
+                elif errors == STRICT:
+                    raise e
+                else:  # WARN
+                    warnings.warn(
+                        f"The log with transaction hash: {log['transactionHash']!r} "
+                        f"and logIndex: {log['logIndex']} encountered the following "
+                        f"error during processing: {type(e).__name__}({e}). It has "
+                        f"been discarded."
+                    )
+                    continue
+
+            yield rich_log
 
     async def create_filter(
         self,
