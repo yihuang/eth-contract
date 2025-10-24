@@ -20,19 +20,22 @@ from eth_utils import (
     get_abi_input_types,
     get_abi_output_types,
     get_normalized_abi_inputs,
+    is_list_like,
     keccak,
 )
 from eth_utils.toolz import assoc, merge
 from hexbytes import HexBytes
 from typing_extensions import Unpack
 from web3 import AsyncWeb3
+from web3._utils.abi import is_array_type
 from web3._utils.events import AsyncEventFilterBuilder, get_event_data
 from web3._utils.filters import AsyncLogFilter, construct_event_filter_params
+from web3.datastructures import AttributeDict, MutableAttributeDict
 from web3.exceptions import (
     InvalidEventABI,
-    LogTopicError, 
-    MismatchedABI, 
-    Web3AttributeError
+    LogTopicError,
+    MismatchedABI,
+    Web3AttributeError,
 )
 from web3.logs import DISCARD, IGNORE, STRICT, WARN, EventLogErrorFlags
 from web3.types import (
@@ -43,7 +46,6 @@ from web3.types import (
     TxParams,
     TxReceipt,
 )
-from web3.datastructures import AttributeDict, MutableAttributeDict
 from web3.utils.abi import (
     _mismatched_abi_error_diagnosis,
     check_if_arguments_can_be_encoded,
@@ -261,6 +263,7 @@ class ContractEvent:
         """
         if from_block is None:
             from web3.exceptions import Web3TypeError
+
             raise Web3TypeError(
                 "Missing mandatory keyword argument to create_filter: `from_block`"
             )
@@ -269,11 +272,11 @@ class ContractEvent:
             argument_filters = {}
 
         _filters = dict(**argument_filters)
-        
+
         # Get the contract address from parent if not provided
         contract_address = address
         if contract_address is None and self.parent is not None:
-            contract_address = self.parent.tx.get('to')
+            contract_address = self.parent.tx.get("to")
 
         _, event_filter_params = construct_event_filter_params(
             self.abi,
@@ -290,8 +293,27 @@ class ContractEvent:
         filter_builder.address = event_filter_params.get("address")
         filter_builder.from_block = event_filter_params.get("fromBlock")
         filter_builder.to_block = event_filter_params.get("toBlock")
-        filter_builder.topics = event_filter_params.get("topics")
-        
+
+        match_any_vals = {
+            arg: value
+            for arg, value in _filters.items()
+            if arg in filter_builder.args
+            and not is_array_type(filter_builder.args[arg].arg_type)
+            and is_list_like(value)
+        }
+        for arg, value in match_any_vals.items():
+            filter_builder.args[arg].match_any(*value)
+
+        match_single_vals = {
+            arg: value
+            for arg, value in _filters.items()
+            if arg in filter_builder.args
+            and not is_array_type(filter_builder.args[arg].arg_type)
+            and not is_list_like(value)
+        }
+        for arg, value in match_single_vals.items():
+            filter_builder.args[arg].match_single(value)
+
         log_filter = await filter_builder.deploy(w3)
         log_filter.log_entry_formatter = get_event_data(w3.codec, self.abi)
         log_filter.builder = filter_builder
