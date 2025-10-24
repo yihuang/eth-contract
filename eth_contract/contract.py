@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import warnings
 from collections import defaultdict
 from copy import copy
 from dataclasses import dataclass, field
@@ -8,7 +7,6 @@ from typing import Any, Iterable, Mapping, Sequence, cast
 
 from eth_abi import encode
 from eth_abi.codec import ABICodec
-from eth_abi.exceptions import InsufficientDataBytes
 from eth_abi.registry import registry as default_registry
 from eth_account.signers.base import BaseAccount
 from eth_typing import ABI, ABIConstructor, ABIEvent, ABIFunction, ChecksumAddress
@@ -20,24 +18,17 @@ from eth_utils import (
     get_abi_input_types,
     get_abi_output_types,
     get_normalized_abi_inputs,
-    is_list_like,
     keccak,
 )
 from eth_utils.toolz import assoc, merge
 from hexbytes import HexBytes
 from typing_extensions import Unpack
 from web3 import AsyncWeb3
-from web3._utils.abi import is_array_type
-from web3._utils.events import AsyncEventFilterBuilder, get_event_data
-from web3._utils.filters import AsyncLogFilter, construct_event_filter_params
-from web3.datastructures import AttributeDict, MutableAttributeDict
-from web3.exceptions import (
-    InvalidEventABI,
-    LogTopicError,
-    MismatchedABI,
-    Web3AttributeError,
-)
-from web3.logs import DISCARD, IGNORE, STRICT, WARN, EventLogErrorFlags
+from web3._utils.events import get_event_data
+from web3._utils.filters import AsyncLogFilter
+from web3.contract.async_contract import AsyncContractEvent
+from web3.exceptions import MismatchedABI
+from web3.logs import WARN, EventLogErrorFlags
 from web3.types import (
     BlockIdentifier,
     EventData,
@@ -177,7 +168,7 @@ class ContractEvent:
     abi: ABIEvent
     parent: Contract | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.signature = abi_to_signature(self.abi)
         self.input_types = get_abi_input_types(self.abi)
         self._topic = None
@@ -192,6 +183,16 @@ class ContractEvent:
             self._topic = keccak(text=self.signature)
         return self._topic
 
+    def _get_web3_event(
+        self, w3: AsyncWeb3, address: ChecksumAddress | None = None
+    ) -> AsyncContractEvent:
+        if address is None and self.parent is not None:
+            address = self.parent.tx.get("to")
+        event = AsyncContractEvent(abi=self.abi)
+        event.w3 = w3
+        event.address = address
+        return event
+
     def parse_log(self, log: LogReceipt) -> EventData | None:
         try:
             return get_event_data(ABICodec(default_registry), self.abi, log)
@@ -199,126 +200,68 @@ class ContractEvent:
             return None
 
     def __call__(self) -> "ContractEvent":
-        """
-        To match web3.py behavior to avoid creating a new instance.
-        """
+        """To match web3.py behavior to avoid creating a new instance."""
         return self
-
-    def process_receipt(
-        self, txn_receipt: TxReceipt, errors: EventLogErrorFlags = WARN
-    ) -> Iterable[EventData]:
-        return list(self._parse_logs(txn_receipt=txn_receipt, errors=errors))
-
-    def _parse_logs(
-        self, txn_receipt: TxReceipt, errors: EventLogErrorFlags
-    ) -> Iterable[EventData]:
-        try:
-            errors.name
-        except AttributeError:
-            raise Web3AttributeError(
-                f"Error flag must be one of: {EventLogErrorFlags.flag_options()}"
-            )
-
-        for log in txn_receipt["logs"]:
-            try:
-                rich_log = get_event_data(ABICodec(default_registry), self.abi, log)
-            except (
-                MismatchedABI,
-                LogTopicError,
-                InvalidEventABI,
-                TypeError,
-                InsufficientDataBytes,
-            ) as e:
-                if errors == DISCARD:
-                    continue
-                elif errors == IGNORE:
-                    new_log = MutableAttributeDict(log)
-                    new_log["errors"] = e
-                    rich_log = AttributeDict(new_log)
-                elif errors == STRICT:
-                    raise e
-                else:  # WARN
-                    warnings.warn(
-                        f"The log with transaction hash: {log['transactionHash']!r} "
-                        f"and logIndex: {log['logIndex']} encountered the following "
-                        f"error during processing: {type(e).__name__}({e}). It has "
-                        f"been discarded."
-                    )
-                    continue
-
-            yield rich_log
 
     async def create_filter(
         self,
         w3: AsyncWeb3,
-        *,  # PEP 3102
+        *,
         argument_filters: dict[str, Any] | None = None,
         from_block: BlockIdentifier | None = None,
         to_block: BlockIdentifier = "latest",
         address: ChecksumAddress | None = None,
         topics: Sequence[Any] | None = None,
     ) -> AsyncLogFilter:
-        """
-        Create filter object that tracks logs emitted by this contract event.
-        """
-        if from_block is None:
-            from web3.exceptions import Web3TypeError
-
-            raise Web3TypeError(
-                "Missing mandatory keyword argument to create_filter: `from_block`"
-            )
-
-        if argument_filters is None:
-            argument_filters = {}
-
-        _filters = dict(**argument_filters)
-
-        # Get the contract address from parent if not provided
-        contract_address = address
-        if contract_address is None and self.parent is not None:
-            contract_address = self.parent.tx.get("to")
-
-        _, event_filter_params = construct_event_filter_params(
-            self.abi,
-            w3.codec,
-            contract_address=contract_address,
-            argument_filters=_filters,
+        event = self._get_web3_event(w3, address)
+        return await event.create_filter(
+            argument_filters=argument_filters,
             from_block=from_block,
             to_block=to_block,
             address=address,
             topics=topics,
         )
 
-        filter_builder = AsyncEventFilterBuilder(self.abi, w3.codec)
-        filter_builder.address = event_filter_params.get("address")
-        filter_builder.from_block = event_filter_params.get("fromBlock")
-        filter_builder.to_block = event_filter_params.get("toBlock")
+    async def get_logs(
+        self,
+        w3: AsyncWeb3,
+        *,
+        argument_filters: dict[str, Any] | None = None,
+        from_block: BlockIdentifier | None = None,
+        to_block: BlockIdentifier | None = None,
+        block_hash: HexBytes | None = None,
+        address: ChecksumAddress | None = None,
+    ) -> list[EventData]:
+        event = self._get_web3_event(w3, address)
+        return await event.get_logs(
+            argument_filters=argument_filters,
+            from_block=from_block,
+            to_block=to_block,
+            block_hash=block_hash,
+        )
 
-        match_any_vals = {
-            arg: value
-            for arg, value in _filters.items()
-            if arg in filter_builder.args
-            and not is_array_type(filter_builder.args[arg].arg_type)
-            and is_list_like(value)
+    def process_receipt(
+        self, txn_receipt: TxReceipt, errors: EventLogErrorFlags = WARN
+    ) -> Iterable[EventData]:
+        result = []
+        for log in txn_receipt["logs"]:
+            parsed_log = self.parse_log(log)
+            if parsed_log is not None:
+                result.append(parsed_log)
+        return result
+
+    async def create_filter_builder(
+        self,
+        w3: AsyncWeb3,
+        address: ChecksumAddress | None = None,
+    ):
+        return self._get_web3_event(w3, address)
+
+    def build_filter(self) -> dict:
+        return {
+            "topics": [self.topic.hex()],
+            "address": self.parent.tx.get("to") if self.parent else None,
         }
-        for arg, value in match_any_vals.items():
-            filter_builder.args[arg].match_any(*value)
-
-        match_single_vals = {
-            arg: value
-            for arg, value in _filters.items()
-            if arg in filter_builder.args
-            and not is_array_type(filter_builder.args[arg].arg_type)
-            and not is_list_like(value)
-        }
-        for arg, value in match_single_vals.items():
-            filter_builder.args[arg].match_single(value)
-
-        log_filter = await filter_builder.deploy(w3)
-        log_filter.log_entry_formatter = get_event_data(w3.codec, self.abi)
-        log_filter.builder = filter_builder
-
-        return log_filter
 
 
 @dataclass
