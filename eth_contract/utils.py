@@ -12,6 +12,7 @@ from eth_account.types import TransactionDictType
 from eth_typing import ChecksumAddress
 from eth_utils import to_bytes, to_checksum_address
 from eth_utils.toolz import assoc
+from hexbytes import HexBytes
 from typing_extensions import Unpack
 from web3 import AsyncWeb3
 from web3._utils.async_transactions import (
@@ -39,18 +40,13 @@ async def sign_transaction(w3: AsyncWeb3, acct: BaseAccount, **tx: Unpack[TxPara
     return acct.sign_transaction(cast(TransactionDictType, tx))
 
 
-async def send_transactions(
+async def broadcast_transactions(
     w3: AsyncWeb3,
     txs: list[TxParams],
     account: BaseAccount | ChecksumAddress | None = None,
     /,
-    check: bool = True,
     **extra: Unpack[TxParams],
-) -> list[TxReceipt]:
-    """
-    Send a batch of transactions, filling in increasing nonces for the same sender
-    if not provided.
-    """
+) -> list[HexBytes]:
     nonces: dict[ChecksumAddress, int] = {}
 
     async def get_nonce(addr: ChecksumAddress) -> Nonce:
@@ -77,6 +73,31 @@ async def send_transactions(
         else:
             txhash = await w3.eth.send_transaction(tx)
         txhashes.append(txhash)
+
+    return txhashes
+
+
+async def broadcast_transaction(
+    w3: AsyncWeb3,
+    account: BaseAccount | ChecksumAddress,
+    **tx: Unpack[TxParams],
+) -> HexBytes:
+    return (await broadcast_transactions(w3, [tx], account))[0]
+
+
+async def send_transactions(
+    w3: AsyncWeb3,
+    txs: list[TxParams],
+    account: BaseAccount | ChecksumAddress | None = None,
+    /,
+    check: bool = True,
+    **extra: Unpack[TxParams],
+) -> list[TxReceipt]:
+    """
+    Send a batch of transactions, filling in increasing nonces for the same sender
+    if not provided.
+    """
+    txhashes = await broadcast_transactions(w3, txs, account, **extra)
 
     receipts = []
     for txhash in txhashes:
