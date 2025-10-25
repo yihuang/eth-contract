@@ -169,6 +169,13 @@ class ContractEvent:
     parent: Contract | None = None
 
     def __post_init__(self) -> None:
+        if "anonymous" not in self.abi:
+            self.abi["anonymous"] = False
+
+        for p in self.abi["inputs"]:
+            if "indexed" not in p:
+                p["indexed"] = False
+
         self.signature = abi_to_signature(self.abi)
         self._topic = None
 

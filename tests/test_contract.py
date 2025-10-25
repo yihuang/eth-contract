@@ -7,7 +7,6 @@ from eth_contract.utils import get_initcode
 from web3 import AsyncWeb3
 from web3.providers import AsyncHTTPProvider
 from .conftest import ETH_MAINNET_FORK
-from .contracts import MockERC20_ARTIFACT
 
 
 def test_contract_addresses():
@@ -243,7 +242,8 @@ class TestContractFromABI:
 
 
 class TestContractEvent:
-    transfer_event = Contract.from_abi(MockERC20_ARTIFACT["abi"]).events.Transfer
+    abi = ["event Transfer(address indexed from, address indexed to, uint256 amount)"]
+    transfer_event = Contract.from_abi(abi).events.Transfer
     usdc = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
     tx_hash = "0x2ce8669f490735b8e1757f9002b03f22b384dcfa1a3e82a7590c38e18efbe7f5"
 
@@ -251,9 +251,19 @@ class TestContractEvent:
     async def test_process_receipt(self):
         w3 = AsyncWeb3(AsyncHTTPProvider(ETH_MAINNET_FORK))
         res = await w3.eth.get_transaction_receipt(self.tx_hash)
-        events = list(self.transfer_event.process_receipt(res))
-        assert len(events) == 1
-        assert events[0]["event"] == "Transfer"
+        abi = [{
+            "type": "event",
+            "name": "Transfer",
+            "inputs": [
+                {"name": "from", "type": "address", "indexed": True},
+                {"name": "to", "type": "address", "indexed": True},
+                {"name": "amount", "type": "uint256"},
+            ]
+        }]
+        for a in [self.abi, abi]:
+            events = Contract.from_abi(a).events.Transfer.process_receipt(res)
+            assert len(events) == 1
+            assert events[0]["event"] == "Transfer"
 
     @pytest.mark.asyncio
     async def test_create_filter(self):
