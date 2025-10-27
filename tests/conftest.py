@@ -34,7 +34,7 @@ from .contracts import (
     WETH_SALT,
 )
 
-ETH_MAINNET_FORK = "https://eth-mainnet.public.blastapi.io"
+ETH_MAINNET_FORK = "https://mainnet.infura.io/v3/211fd3f037ac4756b03ad20662f54a64"
 Account.enable_unaudited_hdwallet_features()
 TEST_MNEMONIC = (
     "body bag bird mix language evidence what liar reunion wire lesson evolve"
