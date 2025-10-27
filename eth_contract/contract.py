@@ -19,6 +19,7 @@ from eth_utils import (
     get_abi_output_types,
     get_normalized_abi_inputs,
     keccak,
+    to_checksum_address,
 )
 from eth_utils.toolz import assoc, merge
 from hexbytes import HexBytes
@@ -167,6 +168,7 @@ class ContractFunction:
 class ContractEvent:
     abi: ABIEvent
     parent: Contract | None = None
+    _topic: HexBytes | None = None
 
     def __post_init__(self) -> None:
         if "anonymous" not in self.abi:
@@ -186,17 +188,20 @@ class ContractEvent:
     @property
     def topic(self) -> HexBytes:
         if self._topic is None:
-            self._topic = keccak(text=self.signature)
+            self._topic = HexBytes(keccak(text=self.signature))
         return self._topic
 
     def _get_web3_event(
         self, w3: AsyncWeb3, address: ChecksumAddress | None = None
     ) -> AsyncContractEvent:
         if address is None and self.parent is not None:
-            address = self.parent.tx.get("to")
+            parent_address = self.parent.tx.get("to")
+            if parent_address is not None:
+                address = to_checksum_address(parent_address)
         event = AsyncContractEvent(abi=self.abi)
         event.w3 = w3
-        event.address = address
+        if address is not None:
+            event.address = address
         return event
 
     def parse_log(self, log: LogReceipt) -> EventData | None:
