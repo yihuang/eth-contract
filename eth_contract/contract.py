@@ -287,7 +287,11 @@ class Contract:
         """
         assert isinstance(abi_or_signatures, list)
         if isinstance(abi_or_signatures[0], str):
-            abi = parse_abi(abi_or_signatures)
+            normalized = []
+            for sig in abi_or_signatures:
+                normalized_sig = " ".join(sig.split())
+                normalized.append(normalized_sig)
+            abi = parse_abi(normalized)
         else:
             abi = abi_or_signatures  # type: ignore
         return cls(abi=abi, tx=kwargs)
