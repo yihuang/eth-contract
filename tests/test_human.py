@@ -1556,3 +1556,55 @@ class TestEdgeCases:
 
         # Should be different objects due to different struct contexts
         assert param1 is not param2
+
+
+def test_multiline_signature():
+    parse_abi(
+        [
+            """
+struct Document {
+  string name;
+  string denom;
+  string uri;
+  string checksum;
+  string checksumAlgo;
+  string timestamp;
+  string figi;
+  string individualId;
+}""",
+            """
+struct PageRequest {
+  bytes key;
+  uint64 offset;
+  uint64 limit;
+  bool countTotal;
+  bool reverse;
+}""",
+            """
+struct PageResponse {
+  bytes nextKey;
+  uint64 total;
+}""",
+            "function addDocument(Document document) returns ()",
+            "function removeDocument(string denom, uint64 index) returns ()",
+            """
+function documents(
+  string denom,
+  uint64 index,
+  PageRequest pagination
+) returns (
+  Document[] documents,
+  PageResponse pagination
+)""",
+            """
+function grantRole(
+  uint64 registryId,
+  string checksum,
+  address account,
+  string role,
+) returns ()""",
+            """
+function revokeRole(uint64 registryId, string checksum, address account) returns ()
+            """,
+        ]
+    )
