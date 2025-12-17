@@ -560,6 +560,11 @@ def parse_signature(
         raise ValueError(f"Unknown signature type: {prefix}")
 
 
+def process_multiline(s: str) -> str:
+    """Process multiline signatures by removing newlines and extra spaces."""
+    return " ".join(s.split())
+
+
 def parse_abi(signatures: list[str]) -> ABI:
     """
     Parse a complete human-readable ABI interface into JSON ABI format.
@@ -581,6 +586,8 @@ def parse_abi(signatures: list[str]) -> ABI:
     """
     if not signatures:
         raise ValueError("At least one signature required")
+
+    signatures = [process_multiline(s) for s in signatures]
 
     # First pass: extract and parse all struct definitions
     structs = parse_structs(signatures)
