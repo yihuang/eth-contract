@@ -265,6 +265,7 @@ class TestContractEvent:
             assert len(events) == 1
             assert events[0]["event"] == "Transfer"
 
+    @pytest.mark.skip(reason="Public RPC endpoint doesn't support eth_newFilter")
     @pytest.mark.asyncio
     async def test_create_filter(self):
         w3 = AsyncWeb3(AsyncHTTPProvider(ETH_MAINNET_FORK))
