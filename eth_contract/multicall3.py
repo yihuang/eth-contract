@@ -36,9 +36,10 @@ async def multicall(
     w3: AsyncWeb3,
     calls: list[tuple[ChecksumAddress, ContractFunction]],
     allow_failure=False,
+    **kwargs,
 ) -> list[Any]:
     call3 = [Call3(target, allow_failure, fn.data) for target, fn in calls]
-    results = await MULTICALL3.fns.aggregate3(call3).call(w3)
+    results = await MULTICALL3.fns.aggregate3(call3).call(w3, **kwargs)
     values = []
     for (_, fn), (success, data) in zip(calls, results):
         if success and data:
