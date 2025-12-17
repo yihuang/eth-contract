@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from copy import copy
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence, cast
+from typing import Any, Iterable, Mapping, Sequence, cast
 
 from eth_abi import encode
 from eth_abi.codec import ABICodec
@@ -19,13 +19,17 @@ from eth_utils import (
     get_abi_output_types,
     get_normalized_abi_inputs,
     keccak,
+    to_checksum_address,
 )
 from eth_utils.toolz import assoc, merge
 from hexbytes import HexBytes
 from typing_extensions import Unpack
 from web3 import AsyncWeb3
 from web3._utils.events import get_event_data
+from web3._utils.filters import AsyncLogFilter
+from web3.contract.async_contract import AsyncContractEvent
 from web3.exceptions import MismatchedABI
+from web3.logs import WARN, EventLogErrorFlags
 from web3.types import (
     BlockIdentifier,
     EventData,
@@ -163,10 +167,18 @@ class ContractFunction:
 @dataclass
 class ContractEvent:
     abi: ABIEvent
+    parent: Contract | None = None
+    _topic: HexBytes | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        if "anonymous" not in self.abi:
+            self.abi["anonymous"] = False
+
+        for p in self.abi["inputs"]:
+            if "indexed" not in p:
+                p["indexed"] = False
+
         self.signature = abi_to_signature(self.abi)
-        self.input_types = get_abi_input_types(self.abi)
         self._topic = None
 
     @property
@@ -176,14 +188,91 @@ class ContractEvent:
     @property
     def topic(self) -> HexBytes:
         if self._topic is None:
-            self._topic = keccak(text=self.signature)
+            self._topic = HexBytes(keccak(text=self.signature))
         return self._topic
+
+    def _get_web3_event(
+        self, w3: AsyncWeb3, address: ChecksumAddress | None = None
+    ) -> AsyncContractEvent:
+        if address is None and self.parent is not None:
+            parent_address = self.parent.tx.get("to")
+            if parent_address is not None:
+                address = to_checksum_address(parent_address)
+        event = AsyncContractEvent(abi=self.abi)
+        event.w3 = w3
+        if address is not None:
+            event.address = address
+        return event
 
     def parse_log(self, log: LogReceipt) -> EventData | None:
         try:
             return get_event_data(ABICodec(default_registry), self.abi, log)
         except MismatchedABI:
             return None
+
+    def __call__(self) -> "ContractEvent":
+        """To match web3.py behavior to avoid creating a new instance."""
+        return self
+
+    async def create_filter(
+        self,
+        w3: AsyncWeb3,
+        *,
+        argument_filters: dict[str, Any] | None = None,
+        from_block: BlockIdentifier | None = None,
+        to_block: BlockIdentifier = "latest",
+        address: ChecksumAddress | None = None,
+        topics: Sequence[Any] | None = None,
+    ) -> AsyncLogFilter:
+        event = self._get_web3_event(w3, address)
+        return await event.create_filter(
+            argument_filters=argument_filters,
+            from_block=from_block,
+            to_block=to_block,
+            address=address,
+            topics=topics,
+        )
+
+    async def get_logs(
+        self,
+        w3: AsyncWeb3,
+        *,
+        argument_filters: dict[str, Any] | None = None,
+        from_block: BlockIdentifier | None = None,
+        to_block: BlockIdentifier | None = None,
+        block_hash: HexBytes | None = None,
+        address: ChecksumAddress | None = None,
+    ) -> list[EventData]:
+        event = self._get_web3_event(w3, address)
+        return await event.get_logs(
+            argument_filters=argument_filters,
+            from_block=from_block,
+            to_block=to_block,
+            block_hash=block_hash,
+        )
+
+    def process_receipt(
+        self, txn_receipt: TxReceipt, errors: EventLogErrorFlags = WARN
+    ) -> Iterable[EventData]:
+        result = []
+        for log in txn_receipt["logs"]:
+            parsed_log = self.parse_log(log)
+            if parsed_log is not None:
+                result.append(parsed_log)
+        return result
+
+    async def create_filter_builder(
+        self,
+        w3: AsyncWeb3,
+        address: ChecksumAddress | None = None,
+    ):
+        return self._get_web3_event(w3, address)
+
+    def build_filter(self) -> dict:
+        return {
+            "topics": [self.topic.hex()],
+            "address": self.parent.tx.get("to") if self.parent else None,
+        }
 
 
 @dataclass
@@ -209,6 +298,7 @@ class ContractFunctions:
 @dataclass
 class ContractEvents:
     abis: Sequence[ABIEvent]
+    parent: Contract | None = None
 
     def __getattr__(self, name: str) -> ContractEvent:
         candidates = filter_abi_by_name(name, self.abis)
@@ -216,12 +306,12 @@ class ContractEvents:
             raise ValueError(f"No such event: {name}")
         if len(candidates) > 1:
             raise ValueError(f"Multiple events found with name: {name}")
-        return ContractEvent(cast(ABIEvent, candidates[0]))
+        return ContractEvent(cast(ABIEvent, candidates[0]), parent=self.parent)
 
     def sig(self, signature: str) -> ContractEvent:
         for abi in self.abis:
             if abi_to_signature(abi) == signature:
-                return ContractEvent(abi)
+                return ContractEvent(abi, parent=self.parent)
         raise ValueError(f"No such event signature: {signature}")
 
 
@@ -239,7 +329,7 @@ class Contract:
             abis[fn["name"]].append(fn)
         self.fns = ContractFunctions(abis, self)
 
-        self.events = ContractEvents(filter_abi_by_type("event", self.abi))
+        self.events = ContractEvents(filter_abi_by_type("event", self.abi), parent=self)
 
         self.constructor: ContractConstructor | None = None
         ctor = filter_abi_by_type("constructor", self.abi)
