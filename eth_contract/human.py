@@ -460,6 +460,7 @@ def parse_event_signature(
         "inputs": [
             parse_abi_parameter(p, EVENT_MODIFIERS, structs, "event") for p in params
         ],
+        "anonymous": False,
     }
 
 
