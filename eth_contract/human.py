@@ -346,6 +346,7 @@ def parse_abi_parameter(
     modifiers: set[str] | None = None,
     structs: dict[str, list[ExtendedComponent]] | None = None,
     abi_type: str | None = None,
+    event: bool = False,
 ) -> ExtendedComponent:
     """Parse a single ABI parameter string into a structured object."""
     if structs is None:
@@ -380,12 +381,16 @@ def parse_abi_parameter(
 
     if modifier == "indexed":
         result["indexed"] = True
+    elif event:
+        result["indexed"] = False
 
     # Determine type
     if tuple_param:
         result["type"] = "tuple"
         params = split_parameters(groups["type"])
-        result["components"] = [parse_abi_parameter(p, structs=structs) for p in params]
+        result["components"] = [
+            parse_abi_parameter(p, structs=structs, event=event) for p in params
+        ]
     elif groups["type"] in structs:
         result["type"] = "tuple"
         result["components"] = structs[groups["type"]]
@@ -458,7 +463,8 @@ def parse_event_signature(
         "type": "event",
         "name": groups["name"],
         "inputs": [
-            parse_abi_parameter(p, EVENT_MODIFIERS, structs, "event") for p in params
+            parse_abi_parameter(p, EVENT_MODIFIERS, structs, "event", event=True)
+            for p in params
         ],
         "anonymous": False,
     }

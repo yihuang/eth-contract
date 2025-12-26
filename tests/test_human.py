@@ -389,7 +389,11 @@ class TestParseEventSignature:
                 {
                     "type": "event",
                     "name": "Transfer",
-                    "inputs": [{"type": "address"}, {"type": "uint256"}],
+                    "inputs": [
+                        {"type": "address", "indexed": False},
+                        {"type": "uint256", "indexed": False},
+                    ],
+                    "anonymous": False,
                 },
             ),
             # Event with indexed parameters
@@ -402,8 +406,9 @@ class TestParseEventSignature:
                     "inputs": [
                         {"type": "address", "name": "from", "indexed": True},
                         {"type": "address", "name": "to", "indexed": True},
-                        {"type": "uint256", "name": "value"},
+                        {"type": "uint256", "name": "value", "indexed": False},
                     ],
+                    "anonymous": False,
                 },
             ),
             # Event with named parameters
@@ -413,10 +418,11 @@ class TestParseEventSignature:
                     "type": "event",
                     "name": "Approval",
                     "inputs": [
-                        {"type": "address", "name": "owner"},
-                        {"type": "address", "name": "spender"},
-                        {"type": "uint256", "name": "value"},
+                        {"type": "address", "name": "owner", "indexed": False},
+                        {"type": "address", "name": "spender", "indexed": False},
+                        {"type": "uint256", "name": "value", "indexed": False},
                     ],
+                    "anonymous": False,
                 },
             ),
         ],
@@ -808,8 +814,9 @@ class TestParseSignature:
                     "inputs": [
                         {"type": "address", "name": "from", "indexed": True},
                         {"type": "address", "name": "to", "indexed": True},
-                        {"type": "uint256", "name": "value"},
+                        {"type": "uint256", "name": "value", "indexed": False},
                     ],
+                    "anonymous": False,
                 },
             ),
             # Error signature
