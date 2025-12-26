@@ -73,9 +73,9 @@ class ContractFunction:
     def from_abi(cls, i: ABIFunction | str) -> ContractFunction:
         if isinstance(i, str):
             abi = parse_function_signature(process_multiline(i))
-            assert abi["type"] == "function"
         else:
             abi = i
+        assert abi["type"] == "function"
         return cls([abi])
 
     def __post_init__(self) -> None:
@@ -178,9 +178,9 @@ class ContractEvent:
     def from_abi(cls, i: ABIEvent | str) -> ContractEvent:
         if isinstance(i, str):
             abi = parse_event_signature(process_multiline(i))
-            assert abi["type"] == "event"
         else:
             abi = i
+        assert abi["type"] == "event"
         return cls(abi)
 
     @property
