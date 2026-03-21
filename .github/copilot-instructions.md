@@ -26,7 +26,7 @@ eth-contract/
 │   ├── entrypoint.py          # ERC-4337 EntryPoint v0.7 & v0.8
 │   ├── deploy_utils.py        # Pre-deploy well-known contracts from pre-signed transactions
 │   ├── slots.py               # EVM trace-based ERC20 storage slot analysis
-│   ├── weth.py                # WETH9 contract
+│   ├── weth.py                # WETH contract
 │   ├── history_storage.py     # EIP-2935 block history storage
 │   ├── abis/                  # Built-in ABI JSON files (erc20, multicall3, createx, weth)
 │   ├── deployments/           # Pre-built deployment artifacts (WETH9, EntryPoint07/08)
