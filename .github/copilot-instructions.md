@@ -229,11 +229,11 @@ python -m eth_contract.contract abi.json  # List all signatures in an ABI file
 ### Multicall3 batch calls (`eth_contract/multicall3.py`)
 
 ```python
-from eth_contract.multicall3 import multicall, Call3
+from eth_contract.multicall3 import multicall
 
 results = await multicall(w3, [
-    Call3(target=addr1, callData=fn1.data, allowFailure=False),
-    Call3(target=addr2, callData=fn2.data, allowFailure=True),
+    (addr1, fn1),
+    (addr2, fn2),
 ])
 ```
 
