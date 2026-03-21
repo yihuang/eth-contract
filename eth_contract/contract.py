@@ -29,7 +29,6 @@ from web3._utils.filters import construct_event_filter_params
 from web3.exceptions import MismatchedABI
 from web3.types import (
     BlockIdentifier,
-    ChecksumAddress,
     EventData,
     FilterParams,
     LogReceipt,
@@ -262,12 +261,12 @@ class ContractEvent:
             to_block=to_block,
         )
         logs = await w3.eth.get_logs(filter_params)
-        return [
-            decoded
-            for log in logs
-            for decoded in [self.parse_log(log)]
-            if decoded is not None
-        ]
+        results: list[EventData] = []
+        for log in logs:
+            decoded = self.parse_log(log)
+            if decoded is not None:
+                results.append(decoded)
+        return results
 
     def parse_log(self, log: LogReceipt) -> EventData | None:
         try:
