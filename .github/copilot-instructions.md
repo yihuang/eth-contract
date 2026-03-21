@@ -257,7 +257,7 @@ The package provides ready-to-use contract instances for common contracts:
 ```python
 from eth_contract.erc20 import ERC20
 from eth_contract.multicall3 import MULTICALL3, MULTICALL3_ADDRESS
-from eth_contract.weth import WETH9, WETH9_ARTIFACT
+from eth_contract.weth import WETH, WETH9_ARTIFACT
 from eth_contract.entrypoint import ENTRYPOINT07, ENTRYPOINT08
 ```
 
