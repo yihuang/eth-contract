@@ -75,7 +75,7 @@ Tests require [Anvil](https://book.getfoundry.sh/reference/anvil/) (the Foundry 
 
 ## Testing
 
-Tests use an **Anvil** local Ethereum node as the backend. All test fixtures are async and session-scoped.
+Tests use an **Anvil** local Ethereum node as the backend. Chain-backed fixtures (`w3`, `fork_w3`) are async and session-scoped; other fixtures (for example, accounts) are synchronous but also session-scoped.
 
 ```bash
 pytest                                            # Run all tests
