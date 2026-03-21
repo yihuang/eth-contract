@@ -5,7 +5,7 @@
 `eth-contract` is an EVM contract abstraction library that decouples contract interactions from `Web3` instances. This makes it easy to work with the same contract definition across multiple blockchain providers or networks. It also includes a suite of utilities for ABI parsing, deployment, batch calls, and ERC-4337 account abstraction.
 
 **Package**: `eth_contract`  
-**Python**: 3.12 (see `.python-version`)  
+**Python**: Library supports Python >=3.9 (dev environment uses 3.12; see `.python-version`)  
 **Key dependency**: `web3>=7.12.0`
 
 ---
@@ -39,6 +39,7 @@ eth-contract/
 │   ├── test_erc20.py
 │   ├── test_abi.py
 │   ├── test_slots.py
+│   ├── trace.py               # EVM trace helper utilities for tests
 │   ├── contracts.py           # Test contract definitions and artifacts
 │   └── contracts/             # Test contract compiled artifacts
 ├── pyproject.toml             # Build config, dependencies, tool settings
@@ -94,14 +95,6 @@ pytest tests/test_contract.py::ClassName::test_fn # Single test
 
 **Test mnemonic**: `body bag bird mix language evidence what liar reunion wire lesson evolve`  
 **BIP44 path**: `m/44'/60'/0'/0/{0..4}`
-
-Anvil pre-deploys the following on startup:
-- CREATE2 factory: `0x4e59b44847b379578588920ca78fbf26c0b4956c`
-- Multicall3: `0xcA11bde05977b3631167028862bE2a173976CA11`
-- CreateX factory: `0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed`
-- WETH9
-- EIP-2935 history storage
-- ERC-4337 EntryPoint v0.7 and v0.8
 
 ### Async tests
 
