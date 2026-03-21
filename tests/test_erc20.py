@@ -302,3 +302,41 @@ def test_pyrevm_trace_log():
             topics = stack[-(2 + num_topics) : -2][::-1]
             assert topics[0] == deposit_hash, "deposit event hash mismatch"
             assert to_checksum_address(topics[1]) == whale, "whale address mismatch"
+
+
+@pytest.mark.asyncio
+async def test_event_get_logs(w3):
+    """Test get_logs fetches and decodes Transfer events emitted by a mock ERC20."""
+    owner = (await w3.eth.accounts)[0]
+    salt = 300
+    initcode = get_initcode(MockERC20_ARTIFACT, "TEST", "TEST", 18)
+    token = await ensure_deployed_by_create2(w3, owner, initcode, salt=salt)
+
+    recipient = (await w3.eth.accounts)[1]
+    amt = 500
+
+    # Record block before the mint so we can filter from that point
+    from_block = await w3.eth.block_number
+
+    await ERC20.fns.mint(owner, amt).transact(w3, owner, to=token)
+    await ERC20.fns.transfer(recipient, amt).transact(w3, owner, to=token)
+
+    transfer_event = ERC20.events.Transfer
+
+    # Fetch all Transfer events for this token since the mint
+    logs = await transfer_event.get_logs(
+        w3, address=token, from_block=from_block
+    )
+    assert len(logs) >= 2
+
+    # Fetch only transfers where `from` == owner (the mint emits from == zero address,
+    # the manual transfer emits from == owner)
+    owner_logs = await transfer_event.get_logs(
+        w3,
+        address=token,
+        argument_filters={"from": owner},
+        from_block=from_block,
+    )
+    assert len(owner_logs) >= 1
+    for log in owner_logs:
+        assert log["args"]["from"] == owner
