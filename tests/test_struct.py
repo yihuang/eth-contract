@@ -225,10 +225,11 @@ class TestFixedSizeArrays:
 
     def test_fixed_array_human_readable(self):
         result = FixedArrayStruct.human_readable_abi()
-        assert "uint256[3] uint_arr" in result
-        assert "address[2] addr_arr" in result
-        assert "bytes32[2] bytes32_arr" in result
-        assert "bool[4] bool_arr" in result
+        assert len(result) == 1
+        assert "uint256[3] uint_arr" in result[0]
+        assert "address[2] addr_arr" in result[0]
+        assert "bytes32[2] bytes32_arr" in result[0]
+        assert "bool[4] bool_arr" in result[0]
 
 
 # ---------------------------------------------------------------------------
@@ -282,10 +283,11 @@ class TestDynamicArrays:
 
     def test_dynamic_array_human_readable(self):
         result = DynArrayStruct.human_readable_abi()
-        assert "uint256[] uint_list" in result
-        assert "string[] str_list" in result
-        assert "bytes[] bytes_list" in result
-        assert "address[] addr_list" in result
+        assert len(result) == 1
+        assert "uint256[] uint_list" in result[0]
+        assert "string[] str_list" in result[0]
+        assert "bytes[] bytes_list" in result[0]
+        assert "address[] addr_list" in result[0]
 
 
 # ---------------------------------------------------------------------------
@@ -313,8 +315,9 @@ class TestMultiDimArrays:
 
     def test_multi_dim_human_readable(self):
         result = MultiDimStruct.human_readable_abi()
-        assert "uint256[][] matrix" in result
-        assert "uint8[2][3] grid" in result
+        assert len(result) == 1
+        assert "uint256[][] matrix" in result[0]
+        assert "uint8[2][3] grid" in result[0]
 
 
 # ---------------------------------------------------------------------------
@@ -325,16 +328,17 @@ class TestMultiDimArrays:
 class TestHumanReadableABI:
     def test_inner_human_readable(self):
         result = Inner.human_readable_abi()
-        assert result == "struct Inner { bool x; bytes32 y; }"
+        assert result == ["struct Inner { bool x; bytes32 y; }"]
 
     def test_transfer_human_readable(self):
         result = Transfer.human_readable_abi()
-        assert result == (
+        assert result == [
+            "struct Inner { bool x; bytes32 y; }",
             "struct Transfer { "
             "address from_addr; address to_addr; uint256 value; "
             "string memo; Inner inner; "
-            "}"
-        )
+            "}",
+        ]
 
     def test_mixed_types_human_readable(self):
         class Misc(ABIStruct):
@@ -345,10 +349,10 @@ class TestHumanReadableABI:
             items: Annotated[tuple, "address[]"]
 
         result = Misc.human_readable_abi()
-        assert result == (
+        assert result == [
             "struct Misc { uint8 n; bool flag; bytes data; "
             "int256[3] vals; address[] items; }"
-        )
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -392,3 +396,23 @@ class TestMetaclassSafeguards:
 
             class Child(Parent):  # type: ignore[misc]
                 y: Annotated[int, "uint256"]
+
+    def test_subclass_without_fields_inherits_parent(self):
+        class Base(ABIStruct):
+            val: Annotated[int, "uint256"]
+            flag: Annotated[bool, "bool"]
+
+        # Subclassing without adding fields is valid (e.g., for re-export /
+        # specialisation without changing the struct layout).
+        class Alias(Base):
+            pass
+
+        assert Alias._fields == ("val", "flag")
+        inst = Alias(val=99, flag=True)
+        decoded = Alias.decode(inst.encode())
+        assert decoded == inst
+        assert decoded.val == 99
+        assert decoded.flag is True
+        assert Alias.human_readable_abi() == [
+            "struct Alias { uint256 val; bool flag; }"
+        ]

@@ -171,7 +171,8 @@ class ABIStruct(metaclass=ABIStructMeta):
 
     * ``encode()`` – ABI-encode the instance to ``bytes``
     * ``decode(data)`` – class method: ABI-decode ``bytes`` to an instance
-    * ``human_readable_abi()`` – class method: Solidity ``struct`` definition
+    * ``human_readable_abi()`` – class method: list of Solidity ``struct`` definitions
+      (nested struct definitions come first, outermost last)
 
     Example::
 
@@ -241,8 +242,12 @@ class ABIStruct(metaclass=ABIStructMeta):
         return _build_instance(cls, decoded)  # type: ignore[return-value]
 
     @classmethod
-    def human_readable_abi(cls) -> str:
-        """Return a Solidity-style struct definition string for this struct."""
+    def _collect_human_readable_abi(cls, seen: "dict[str, str]") -> None:
+        """
+        Recursively collect Solidity struct definitions into *seen* (ordered
+        dict keyed by struct name) so that nested structs appear before the
+        structs that reference them.
+        """
         hints = get_type_hints(cls, include_extras=True)
         fields = cls._fields  # type: ignore[attr-defined]
 
@@ -259,6 +264,7 @@ class ABIStruct(metaclass=ABIStructMeta):
                     )
                 solidity_type = args[1]
             elif isinstance(annotation, type) and issubclass(annotation, ABIStruct):
+                annotation._collect_human_readable_abi(seen)
                 solidity_type = annotation.__name__
             else:
                 raise ValueError(
@@ -266,5 +272,18 @@ class ABIStruct(metaclass=ABIStructMeta):
                 )
             field_strs.append(f"{solidity_type} {field_name}")
 
-        properties = "; ".join(field_strs)
-        return f"struct {cls.__name__} {{ {properties}; }}"
+        if cls.__name__ not in seen:
+            properties = "; ".join(field_strs)
+            seen[cls.__name__] = f"struct {cls.__name__} {{ {properties}; }}"
+
+    @classmethod
+    def human_readable_abi(cls) -> "list[str]":
+        """
+        Return a list of Solidity-style struct definitions for this struct and
+        all structs it references (directly or transitively).  Nested struct
+        definitions appear before the structs that reference them, so the list
+        can be passed directly to ``parse_abi`` or similar tools.
+        """
+        seen: "dict[str, str]" = {}
+        cls._collect_human_readable_abi(seen)
+        return list(seen.values())
