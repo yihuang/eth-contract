@@ -94,6 +94,67 @@ def _build_instance(cls: Any, values: Any) -> Any:
     return cls(**kwargs)
 
 
+def _compute_components(cls: Any) -> list:
+    """
+    Compute the ordered list of ABI component dicts for a struct class.
+    Nested structs use their already-cached ``_abi_components_cache``.
+    """
+    hints = get_type_hints(cls, include_extras=True)
+    fields = cls._fields
+
+    components = []
+    for field_name in fields:
+        annotation = hints[field_name]
+        abi_type = _get_field_abi_type(annotation, field_name, cls.__name__)
+        inner_cls = _get_inner_struct(annotation)
+
+        component: dict = {"name": field_name}
+        if inner_cls is not None:
+            component["type"] = "tuple"
+            component["components"] = inner_cls._abi_components_cache
+        else:
+            component["type"] = abi_type
+
+        components.append(component)
+
+    return components
+
+
+def _collect_hra(cls: Any, seen: "dict[str, str]") -> None:
+    """
+    Recursively collect Solidity struct definitions into *seen* (an ordered
+    dict keyed by struct name) so that nested structs appear before the
+    structs that reference them.
+    """
+    hints = get_type_hints(cls, include_extras=True)
+    fields = cls._fields
+
+    field_strs = []
+    for field_name in fields:
+        annotation = hints[field_name]
+        origin = get_origin(annotation)
+        if origin is typing.Annotated:
+            args = get_args(annotation)
+            if len(args) < 2 or not isinstance(args[1], str):
+                raise ValueError(
+                    f"Field '{field_name}' in '{cls.__name__}' has Annotated "
+                    f"type but the second argument must be a Solidity type string"
+                )
+            solidity_type = args[1]
+        elif isinstance(annotation, type) and issubclass(annotation, ABIStruct):
+            _collect_hra(annotation, seen)
+            solidity_type = annotation.__name__
+        else:
+            raise ValueError(
+                f"Cannot determine Solidity type for field '{field_name}'"
+            )
+        field_strs.append(f"{solidity_type} {field_name}")
+
+    if cls.__name__ not in seen:
+        properties = "; ".join(field_strs)
+        seen[cls.__name__] = f"struct {cls.__name__} {{ {properties}; }}"
+
+
 class ABIStructMeta(type):
     """
     Metaclass for ABIStruct.  When a user defines a subclass of ABIStruct
@@ -101,6 +162,10 @@ class ABIStructMeta(type):
     ``collections.namedtuple`` base so the resulting class is both a
     NamedTuple (immutable, indexable, named-attribute access) and an
     ABIStruct (encode / decode / human_readable_abi).
+
+    ABI component data, the encoded type string, and the human-readable ABI
+    list are all pre-computed and cached as class attributes at definition
+    time, so encode/decode incur no repeated introspection overhead.
     """
 
     def __new__(
@@ -116,7 +181,7 @@ class ABIStructMeta(type):
 
         annotations = namespace.get("__annotations__", {})
         if not annotations:
-            # Abstract or marker subclass with no new fields.
+            # Marker / alias subclass with no new fields – inherit as-is.
             return super().__new__(mcs, name, bases, namespace)
 
         # Reject mixing non-ABIStruct bases when defining fields.
@@ -129,19 +194,35 @@ class ABIStructMeta(type):
                 f"when defining fields; unsupported bases: {non_abistruct_bases}"
             )
 
-        # Reject adding fields to a concrete (field-bearing) ABIStruct.
         abistruct_bases = [b for b in bases if isinstance(b, ABIStructMeta)]
-        concrete_bases = [b for b in abistruct_bases if hasattr(b, "_fields")]
-        if concrete_bases:
+
+        # Collect inherited fields from concrete (field-bearing) ABIStruct bases.
+        parent_fields: "list[str]" = []
+        parent_annotations: "dict[str, Any]" = {}
+        for b in abistruct_bases:
+            if hasattr(b, "_fields") and b._fields:
+                for f in b._fields:
+                    if f not in parent_annotations:
+                        parent_fields.append(f)
+                        parent_annotations[f] = get_type_hints(
+                            b, include_extras=True
+                        )[f]
+
+        # Prevent accidental redefinition of an inherited field.
+        redef = set(parent_fields) & set(annotations.keys())
+        if redef:
             raise TypeError(
-                f"Cannot add fields to a subclass of concrete ABIStruct "
-                f"'{concrete_bases[0].__name__}'. "
-                f"Define a standalone ABIStruct instead."
+                f"ABIStruct subclass '{name}' redefines inherited "
+                f"field(s): {sorted(redef)}"
             )
 
-        # Build a namedtuple from the declared fields.
+        # All fields: parent fields first, then the new fields.
+        all_field_names = parent_fields + list(annotations.keys())
+        all_annotations = {**parent_annotations, **annotations}
+
+        # Build a namedtuple that covers every field.
         nt = collections.namedtuple(  # type: ignore[misc]
-            name, list(annotations.keys())
+            name, all_field_names
         )
 
         # Build the new class hierarchy: namedtuple first, then ABIStruct bases.
@@ -152,9 +233,25 @@ class ABIStructMeta(type):
             for k, v in namespace.items()
             if k not in ("__dict__", "__weakref__")
         }
-        new_ns["__annotations__"] = annotations
+        new_ns["__annotations__"] = all_annotations
 
         return type.__new__(mcs, name, new_bases, new_ns)
+
+    def __init__(cls, name: str, bases: tuple, namespace: dict) -> None:
+        super().__init__(name, bases, namespace)
+        has_abistruct_base = any(isinstance(b, ABIStructMeta) for b in bases)
+        if not has_abistruct_base:
+            return
+        if not getattr(cls, "_fields", None):
+            return
+        # Pre-compute and cache all ABI data at class-definition time so that
+        # encode / decode / human_readable_abi do no repeated introspection.
+        components = _compute_components(cls)
+        cls._abi_components_cache = components
+        cls._abi_type_str_cache = _build_type_str(components)
+        seen: "dict[str, str]" = {}
+        _collect_hra(cls, seen)
+        cls._human_readable_abi_cache = list(seen.values())
 
 
 class ABIStruct(metaclass=ABIStructMeta):
@@ -164,15 +261,19 @@ class ABIStruct(metaclass=ABIStructMeta):
     Subclass ``ABIStruct`` and annotate every field with
     ``Annotated[PythonType, 'solidity_type']``.  A nested ``ABIStruct``
     subclass may be used directly as a field type (the Solidity type is
-    inferred as ``tuple``).
+    inferred as ``tuple``).  Fields from a parent ``ABIStruct`` are
+    automatically inherited when a subclass adds new fields.
 
     The resulting class behaves like a ``NamedTuple`` (immutable, indexable,
     positional and keyword construction) and additionally provides:
 
     * ``encode()`` – ABI-encode the instance to ``bytes``
     * ``decode(data)`` – class method: ABI-decode ``bytes`` to an instance
-    * ``human_readable_abi()`` – class method: list of Solidity ``struct`` definitions
-      (nested struct definitions come first, outermost last)
+    * ``human_readable_abi()`` – class method: list of Solidity ``struct``
+      definitions (nested struct definitions come first, outermost last)
+
+    All ABI metadata is computed once at class-definition time and cached,
+    so encode/decode have no introspection overhead at call time.
 
     Example::
 
@@ -204,77 +305,28 @@ class ABIStruct(metaclass=ABIStructMeta):
     """
 
     @classmethod
-    def _abi_components(cls) -> list:
-        """Return the ordered list of ABI component dicts for this struct."""
-        hints = get_type_hints(cls, include_extras=True)
-        fields = cls._fields  # type: ignore[attr-defined]
-
-        components = []
-        for field_name in fields:
-            annotation = hints[field_name]
-            abi_type = _get_field_abi_type(annotation, field_name, cls.__name__)
-            inner_cls = _get_inner_struct(annotation)
-
-            component: dict = {"name": field_name}
-            if inner_cls is not None:
-                component["type"] = "tuple"
-                component["components"] = inner_cls._abi_components()
-            else:
-                component["type"] = abi_type
-
-            components.append(component)
-
-        return components
+    def _abi_components(cls) -> "list[dict]":
+        """Return the cached list of ABI component dicts for this struct."""
+        return cls._abi_components_cache  # type: ignore[attr-defined]
 
     def encode(self) -> bytes:
         """ABI-encode this struct instance to bytes."""
-        components = self.__class__._abi_components()
-        type_str = _build_type_str(components)
-        values = _prepare_values(self, components)
-        return abi_encode([type_str], [values])
+        cls = self.__class__
+        values = _prepare_values(
+            self, cls._abi_components_cache  # type: ignore[attr-defined]
+        )
+        return abi_encode(
+            [cls._abi_type_str_cache], [values]  # type: ignore[attr-defined]
+        )
 
     @classmethod
     def decode(cls, data: bytes) -> "ABIStruct":
         """ABI-decode *data* bytes and return an instance of this struct."""
-        components = cls._abi_components()
-        type_str = _build_type_str(components)
-        (decoded,) = abi_decode([type_str], data)
+        (decoded,) = abi_decode(
+            [cls._abi_type_str_cache],  # type: ignore[attr-defined]
+            data,
+        )
         return _build_instance(cls, decoded)  # type: ignore[return-value]
-
-    @classmethod
-    def _collect_human_readable_abi(cls, seen: "dict[str, str]") -> None:
-        """
-        Recursively collect Solidity struct definitions into *seen* (ordered
-        dict keyed by struct name) so that nested structs appear before the
-        structs that reference them.
-        """
-        hints = get_type_hints(cls, include_extras=True)
-        fields = cls._fields  # type: ignore[attr-defined]
-
-        field_strs = []
-        for field_name in fields:
-            annotation = hints[field_name]
-            origin = get_origin(annotation)
-            if origin is typing.Annotated:
-                args = get_args(annotation)
-                if len(args) < 2 or not isinstance(args[1], str):
-                    raise ValueError(
-                        f"Field '{field_name}' in '{cls.__name__}' has Annotated "
-                        f"type but the second argument must be a Solidity type string"
-                    )
-                solidity_type = args[1]
-            elif isinstance(annotation, type) and issubclass(annotation, ABIStruct):
-                annotation._collect_human_readable_abi(seen)
-                solidity_type = annotation.__name__
-            else:
-                raise ValueError(
-                    f"Cannot determine Solidity type for field '{field_name}'"
-                )
-            field_strs.append(f"{solidity_type} {field_name}")
-
-        if cls.__name__ not in seen:
-            properties = "; ".join(field_strs)
-            seen[cls.__name__] = f"struct {cls.__name__} {{ {properties}; }}"
 
     @classmethod
     def human_readable_abi(cls) -> "list[str]":
@@ -284,6 +336,4 @@ class ABIStruct(metaclass=ABIStructMeta):
         definitions appear before the structs that reference them, so the list
         can be passed directly to ``parse_abi`` or similar tools.
         """
-        seen: "dict[str, str]" = {}
-        cls._collect_human_readable_abi(seen)
-        return list(seen.values())
+        return cls._human_readable_abi_cache  # type: ignore[attr-defined]

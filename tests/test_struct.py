@@ -367,15 +367,11 @@ class TestInvalidAnnotation:
             class Bad(ABIStruct):
                 x: int  # type: ignore[annotation-unchecked]
 
-            Bad._abi_components()
-
     def test_annotated_missing_string_raises(self):
         with pytest.raises(ValueError, match="second argument must be a Solidity type"):
 
             class Bad2(ABIStruct):
                 x: Annotated[int, 42]  # non-string second arg
-
-            Bad2._abi_components()
 
 
 class TestMetaclassSafeguards:
@@ -388,14 +384,33 @@ class TestMetaclassSafeguards:
             class Bad(ABIStruct, Mixin):  # type: ignore[misc]
                 x: Annotated[int, "uint256"]
 
-    def test_concrete_subclass_with_fields_raises(self):
+    def test_field_redefinition_raises(self):
         class Parent(ABIStruct):
             x: Annotated[int, "uint256"]
 
-        with pytest.raises(TypeError, match="Cannot add fields"):
+        with pytest.raises(TypeError, match="redefines inherited"):
 
             class Child(Parent):  # type: ignore[misc]
-                y: Annotated[int, "uint256"]
+                x: Annotated[int, "uint256"]  # redefines 'x'
+
+    def test_concrete_subclass_can_add_fields(self):
+        class Base(ABIStruct):
+            x: Annotated[int, "uint256"]
+            y: Annotated[bool, "bool"]
+
+        class Extended(Base):
+            z: Annotated[int, "int128"]
+
+        assert Extended._fields == ("x", "y", "z")
+        inst = Extended(x=1, y=True, z=-42)
+        decoded = Extended.decode(inst.encode())
+        assert decoded == inst
+        assert decoded.x == 1
+        assert decoded.y is True
+        assert decoded.z == -42
+        assert Extended.human_readable_abi() == [
+            "struct Extended { uint256 x; bool y; int128 z; }"
+        ]
 
     def test_subclass_without_fields_inherits_parent(self):
         class Base(ABIStruct):
