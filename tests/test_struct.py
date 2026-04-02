@@ -361,7 +361,7 @@ class TestInvalidAnnotation:
         with pytest.raises(ValueError, match="must use"):
 
             class Bad(ABIStruct):
-                x: int  # type: ignore[assignment]
+                x: int  # type: ignore[annotation-unchecked]
 
             Bad._abi_components()
 
@@ -372,3 +372,23 @@ class TestInvalidAnnotation:
                 x: Annotated[int, 42]  # non-string second arg
 
             Bad2._abi_components()
+
+
+class TestMetaclassSafeguards:
+    def test_non_abistruct_base_raises(self):
+        with pytest.raises(TypeError, match="cannot mix non-ABIStruct bases"):
+
+            class Mixin:
+                pass
+
+            class Bad(ABIStruct, Mixin):  # type: ignore[misc]
+                x: Annotated[int, "uint256"]
+
+    def test_concrete_subclass_with_fields_raises(self):
+        class Parent(ABIStruct):
+            x: Annotated[int, "uint256"]
+
+        with pytest.raises(TypeError, match="Cannot add fields"):
+
+            class Child(Parent):  # type: ignore[misc]
+                y: Annotated[int, "uint256"]

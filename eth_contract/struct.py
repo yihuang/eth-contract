@@ -119,13 +119,32 @@ class ABIStructMeta(type):
             # Abstract or marker subclass with no new fields.
             return super().__new__(mcs, name, bases, namespace)
 
+        # Reject mixing non-ABIStruct bases when defining fields.
+        non_abistruct_bases = [
+            b for b in bases if not isinstance(b, ABIStructMeta)
+        ]
+        if non_abistruct_bases:
+            raise TypeError(
+                f"ABIStruct subclass '{name}' cannot mix non-ABIStruct bases "
+                f"when defining fields; unsupported bases: {non_abistruct_bases}"
+            )
+
+        # Reject adding fields to a concrete (field-bearing) ABIStruct.
+        abistruct_bases = [b for b in bases if isinstance(b, ABIStructMeta)]
+        concrete_bases = [b for b in abistruct_bases if hasattr(b, "_fields")]
+        if concrete_bases:
+            raise TypeError(
+                f"Cannot add fields to a subclass of concrete ABIStruct "
+                f"'{concrete_bases[0].__name__}'. "
+                f"Define a standalone ABIStruct instead."
+            )
+
         # Build a namedtuple from the declared fields.
         nt = collections.namedtuple(  # type: ignore[misc]
             name, list(annotations.keys())
         )
 
-        # Combine namedtuple with the ABIStruct method-carrier bases.
-        abistruct_bases = [b for b in bases if isinstance(b, ABIStructMeta)]
+        # Build the new class hierarchy: namedtuple first, then ABIStruct bases.
         new_bases = (nt,) + tuple(abistruct_bases)
 
         new_ns = {
