@@ -179,7 +179,12 @@ class TestBytesTypes:
         assert ByteTypes.decode(inst.encode()) == inst
 
     def test_empty_dynamic_bytes(self):
-        inst = ByteTypes(b1=b"\x00", b16=b"\x00" * 16, b32=b"\x00" * 32, dyn_bytes=b"")
+        inst = ByteTypes(
+            b1=b"\x00",
+            b16=b"\x00" * 16,
+            b32=b"\x00" * 32,
+            dyn_bytes=b"",
+        )
         assert ByteTypes.decode(inst.encode()) == inst
 
     def test_bytes_components(self):

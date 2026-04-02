@@ -28,7 +28,7 @@ def _get_field_abi_type(annotation: Any, field_name: str, class_name: str) -> st
     )
 
 
-def _get_inner_struct(annotation: Any) -> "type[ABIStruct] | None":
+def _get_inner_struct(annotation: Any) -> "typing.Optional[typing.Type[ABIStruct]]":
     """Return the nested ABIStruct class for a field annotation, or None."""
     origin = get_origin(annotation)
 
@@ -129,7 +129,9 @@ class ABIStructMeta(type):
         new_bases = (nt,) + tuple(abistruct_bases)
 
         new_ns = {
-            k: v for k, v in namespace.items() if k not in ("__dict__", "__weakref__")
+            k: v
+            for k, v in namespace.items()
+            if k not in ("__dict__", "__weakref__")
         }
         new_ns["__annotations__"] = annotations
 
