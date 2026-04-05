@@ -32,9 +32,5 @@ profile = "black"
 
 [tool.mypy]
 
-[[tool.mypy.overrides]]
-module = "tests.test_struct"
-disable_error_codes = ["call-arg"]
-
 [tool.uv.sources]
 pyrevm = { git = "https://github.com/yihuang/pyrevm.git" }

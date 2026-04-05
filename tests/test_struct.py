@@ -18,12 +18,12 @@ class Transfer(ABIStruct):
     inner: Inner
 
 
-SAMPLE_TRANSFER = Transfer(
+SAMPLE_TRANSFER = Transfer(  # type: ignore[call-arg]
     from_addr="0x1111111111111111111111111111111111111111",
     to_addr="0x2222222222222222222222222222222222222222",
     value=10**18,
     memo="Hello, Ethereum!",
-    inner=Inner(x=True, y=b"\x01" * 32),
+    inner=Inner(x=True, y=b"\x01" * 32),  # type: ignore[call-arg]
 )
 
 
