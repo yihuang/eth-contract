@@ -3,6 +3,7 @@ from typing import Annotated
 import pytest
 
 from eth_contract import ABIStruct
+from eth_contract.contract import Contract
 
 
 class Inner(ABIStruct):
@@ -430,4 +431,96 @@ class TestMetaclassSafeguards:
         assert decoded.flag is True
         assert Alias.human_readable_abi() == [
             "struct Alias { uint256 val; bool flag; }"
+        ]
+
+
+class TestContractFromABI:
+    """Test that human_readable_abi() output integrates with Contract.from_abi()."""
+
+    def test_flat_struct_with_function(self):
+        """Struct definitions from human_readable_abi() resolve correctly
+        when combined with a function signature and passed to Contract.from_abi().
+        """
+
+        class Point(ABIStruct):
+            x: Annotated[int, "uint256"]
+            y: Annotated[int, "uint256"]
+
+        signatures = Point.human_readable_abi() + [
+            "function setPoint(Point p)",
+            "function getPoint() returns (Point)",
+        ]
+        contract = Contract.from_abi(signatures)
+
+        fn_set = contract.fns.setPoint.abi
+        assert fn_set["inputs"] == [
+            {
+                "type": "tuple",
+                "name": "p",
+                "internalType": "struct Point",
+                "components": [
+                    {"type": "uint256", "name": "x"},
+                    {"type": "uint256", "name": "y"},
+                ],
+            }
+        ]
+
+        fn_get = contract.fns.getPoint.abi
+        assert fn_get["outputs"] == [
+            {
+                "type": "tuple",
+                "internalType": "struct Point",
+                "components": [
+                    {"type": "uint256", "name": "x"},
+                    {"type": "uint256", "name": "y"},
+                ],
+            }
+        ]
+
+    def test_nested_struct_with_function(self):
+        """Nested struct definitions (Inner before outer) from human_readable_abi()
+        resolve correctly when combined with a function signature.
+        """
+
+        class Coord(ABIStruct):
+            lat: Annotated[int, "int256"]
+            lon: Annotated[int, "int256"]
+
+        class Route(ABIStruct):
+            origin: Coord
+            destination: Coord
+            distance: Annotated[int, "uint256"]
+
+        # human_readable_abi() returns nested structs first (Coord, then Route)
+        signatures = Route.human_readable_abi() + [
+            "function submitRoute(Route r)",
+        ]
+        contract = Contract.from_abi(signatures)
+
+        fn = contract.fns.submitRoute.abi
+        coord_components = [
+            {"type": "int256", "name": "lat"},
+            {"type": "int256", "name": "lon"},
+        ]
+        assert fn["inputs"] == [
+            {
+                "type": "tuple",
+                "name": "r",
+                "internalType": "struct Route",
+                "components": [
+                    {
+                        "type": "tuple",
+                        "name": "origin",
+                        "internalType": "struct Coord",
+                        "components": coord_components,
+                    },
+                    {
+                        "type": "tuple",
+                        "name": "destination",
+                        "internalType": "struct Coord",
+                        "components": coord_components,
+                    },
+                    {"type": "uint256", "name": "distance"},
+                ],
+            }
         ]
