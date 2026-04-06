@@ -232,7 +232,7 @@ receipt = await send_transaction(w3, account, to=addr, data=calldata)
 # Batch with automatic nonce management
 receipts = await send_transactions(w3, [tx1, tx2, tx3], account=account)
 
-# ERC20 or native transfer (pass None / ZERO_ADDRESS for native ETH)
+# ERC20 or native transfer (pass ZERO_ADDRESS for native ETH)
 await transfer(w3, token_address, sender, receiver, amount)
 await transfer(w3, ZERO_ADDRESS, sender, receiver, amount)  # native ETH
 
