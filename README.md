@@ -36,15 +36,15 @@ Structs are supported too — define them inline and reference them from functio
 
 ```python
 Router = Contract.from_abi([
-    "struct ExactInputSingleParams {"
-    "  address tokenIn;"
-    "  address tokenOut;"
-    "  uint24 fee;"
-    "  address recipient;"
-    "  uint256 amountIn;"
-    "  uint256 amountOutMinimum;"
-    "  uint160 sqrtPriceLimitX96;"
-    "}",
+    """struct ExactInputSingleParams {
+      address tokenIn;
+      address tokenOut;
+      uint24 fee;
+      address recipient;
+      uint256 amountIn;
+      uint256 amountOutMinimum;
+      uint160 sqrtPriceLimitX96;
+    }""",
     "function exactInputSingle(ExactInputSingleParams params) payable returns (uint256 amountOut)",
 ])
 ```
