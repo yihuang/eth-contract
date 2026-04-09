@@ -39,7 +39,12 @@ from web3.utils.abi import (
     check_if_arguments_can_be_encoded,
 )
 
-from .human import parse_abi, parse_function_signature
+from .human import (
+    parse_abi,
+    parse_event_signature,
+    parse_function_signature,
+    process_multiline,
+)
 from .utils import send_transaction
 
 
@@ -67,10 +72,10 @@ class ContractFunction:
     @classmethod
     def from_abi(cls, i: ABIFunction | str) -> ContractFunction:
         if isinstance(i, str):
-            abi = parse_function_signature(i)
-            assert abi["type"] == "function"
+            abi = parse_function_signature(process_multiline(i))
         else:
             abi = i
+        assert abi["type"] == "function"
         return cls([abi])
 
     def __post_init__(self) -> None:
@@ -168,6 +173,15 @@ class ContractEvent:
         self.signature = abi_to_signature(self.abi)
         self.input_types = get_abi_input_types(self.abi)
         self._topic = None
+
+    @classmethod
+    def from_abi(cls, i: ABIEvent | str) -> ContractEvent:
+        if isinstance(i, str):
+            abi = parse_event_signature(process_multiline(i))
+        else:
+            abi = i
+        assert abi["type"] == "event"
+        return cls(abi)
 
     @property
     def name(self) -> str:
