@@ -1,5 +1,5 @@
 import pytest
-from eth_typing import ABI, ChecksumAddress
+from eth_typing import ABI, ChecksumAddress, HexAddress
 from hexbytes import HexBytes
 
 from eth_contract.contract import Contract, ContractEvent
@@ -47,7 +47,7 @@ def test_build_filter_with_address() -> None:
     evt = ContractEvent.from_abi(
         "event Transfer(address indexed from, address indexed to, uint256 value)"
     )
-    addr = ChecksumAddress("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+    addr = ChecksumAddress(HexAddress("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"))
     params = evt.build_filter(address=addr)
     assert params["address"] == addr
     t0 = params["topics"][0]
