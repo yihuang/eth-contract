@@ -281,14 +281,14 @@ class ContractEvent:
         logs = await w3.eth.get_logs(filter_params)
         results: list[EventData] = []
         for log in logs:
-            decoded = self.parse_log(log)
+            decoded = self.parse_log(log, codec=w3.codec)
             if decoded is not None:
                 results.append(decoded)
         return results
 
-    def parse_log(self, log: LogReceipt) -> EventData | None:
+    def parse_log(self, log: LogReceipt, codec: ABICodec | None = None) -> EventData | None:
         try:
-            return get_event_data(_abi_codec, self.abi, log)
+            return get_event_data(codec or _abi_codec, self.abi, log)
         except MismatchedABI:
             return None
 
