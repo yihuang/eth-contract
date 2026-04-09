@@ -366,7 +366,7 @@ class TestInvalidAnnotation:
         with pytest.raises(ValueError, match="must use"):
 
             class Bad(ABIStruct):
-                x: int  # type: ignore[annotation-unchecked]
+                x: float  # type: ignore[annotation-unchecked]
 
     def test_annotated_missing_string_raises(self):
         with pytest.raises(ValueError, match="second argument must be a Solidity type"):
@@ -524,3 +524,166 @@ class TestContractFromABI:
                 ],
             }
         ]
+
+
+# ---------------------------------------------------------------------------
+# Default type mappings (bool, int, str, bytes)
+# ---------------------------------------------------------------------------
+
+
+class DefaultMappings(ABIStruct):
+    flag: bool
+    amount: int
+    label: str
+    data: bytes
+
+
+class TestDefaultTypeMappings:
+    def test_components(self):
+        components = DefaultMappings._abi_components()
+        assert components == [
+            {"name": "flag", "type": "bool"},
+            {"name": "amount", "type": "uint256"},
+            {"name": "label", "type": "string"},
+            {"name": "data", "type": "bytes"},
+        ]
+
+    def test_roundtrip(self):
+        inst = DefaultMappings(
+            flag=True,
+            amount=10**18,
+            label="hello",
+            data=b"\xde\xad",
+        )
+        assert DefaultMappings.decode(inst.encode()) == inst
+
+    def test_human_readable(self):
+        result = DefaultMappings.human_readable_abi()
+        assert len(result) == 1
+        assert "bool flag" in result[0]
+        assert "uint256 amount" in result[0]
+        assert "string label" in result[0]
+        assert "bytes data" in result[0]
+
+    def test_list_of_primitive(self):
+        class PrimLists(ABIStruct):
+            flags: list[bool]
+            amounts: list[int]
+
+        components = PrimLists._abi_components()
+        assert components == [
+            {"name": "flags", "type": "bool[]"},
+            {"name": "amounts", "type": "uint256[]"},
+        ]
+        inst = PrimLists(flags=(True, False, True), amounts=(1, 2, 3))
+        assert PrimLists.decode(inst.encode()) == inst
+
+
+# ---------------------------------------------------------------------------
+# Nested structs in containers
+# ---------------------------------------------------------------------------
+
+
+class ItemStruct(ABIStruct):
+    id: Annotated[int, "uint256"]
+    value: Annotated[int, "uint128"]
+
+
+class ContainerStruct(ABIStruct):
+    items: list[ItemStruct]
+    fixed_items: Annotated[list[ItemStruct], "ItemStruct[2]"]
+    name: Annotated[str, "string"]
+
+
+class TestNestedStructInContainer:
+    def test_components_dynamic_array(self):
+        """list[SomeStruct] produces a tuple[] component."""
+        comp = ContainerStruct._abi_components()
+        items_comp = next(c for c in comp if c["name"] == "items")
+        assert items_comp["type"] == "tuple[]"
+        assert items_comp["components"] == ItemStruct._abi_components_cache
+
+    def test_components_fixed_array(self):
+        """Annotated[list[SomeStruct], 'SomeStruct[N]'] produces tuple[N]."""
+        comp = ContainerStruct._abi_components()
+        fixed_comp = next(c for c in comp if c["name"] == "fixed_items")
+        assert fixed_comp["type"] == "tuple[2]"
+        assert fixed_comp["components"] == ItemStruct._abi_components_cache
+
+    def test_dynamic_array_roundtrip(self):
+        items = (
+            ItemStruct(id=1, value=100),
+            ItemStruct(id=2, value=200),
+            ItemStruct(id=3, value=300),
+        )
+        inst = ContainerStruct(
+            items=items,
+            fixed_items=(ItemStruct(id=10, value=10), ItemStruct(id=20, value=20)),
+            name="test",
+        )
+        decoded = ContainerStruct.decode(inst.encode())
+        assert decoded == inst
+
+    def test_empty_dynamic_array(self):
+        inst = ContainerStruct(
+            items=(),
+            fixed_items=(ItemStruct(id=0, value=0), ItemStruct(id=1, value=1)),
+            name="",
+        )
+        decoded = ContainerStruct.decode(inst.encode())
+        assert decoded == inst
+
+    def test_inner_struct_type_after_decode(self):
+        items = (ItemStruct(id=7, value=77),)
+        inst = ContainerStruct(
+            items=items,
+            fixed_items=(ItemStruct(id=1, value=1), ItemStruct(id=2, value=2)),
+            name="typed",
+        )
+        decoded = ContainerStruct.decode(inst.encode())
+        assert isinstance(decoded.items[0], ItemStruct)
+        assert isinstance(decoded.fixed_items[0], ItemStruct)
+
+    def test_dynamic_array_standalone(self):
+        """A struct with only a list[Inner] field."""
+
+        class Wrapper(ABIStruct):
+            inners: list[ItemStruct]
+
+        inst = Wrapper(
+            inners=(
+                ItemStruct(id=1, value=11),
+                ItemStruct(id=2, value=22),
+            )
+        )
+        decoded = Wrapper.decode(inst.encode())
+        assert decoded == inst
+        assert all(isinstance(e, ItemStruct) for e in decoded.inners)
+
+    def test_human_readable_abi_dynamic_array(self):
+        """list[Inner] → 'Inner[] fieldname' in the struct definition."""
+        result = ContainerStruct.human_readable_abi()
+        # ItemStruct definition must come first
+        assert result[0] == "struct ItemStruct { uint256 id; uint128 value; }"
+        assert "ItemStruct[] items" in result[1]
+
+    def test_human_readable_abi_fixed_array(self):
+        """Annotated[list[Inner], 'Inner[2]'] → 'Inner[2] fieldname'."""
+        result = ContainerStruct.human_readable_abi()
+        assert "ItemStruct[2] fixed_items" in result[1]
+
+    def test_type_str_dynamic_array(self):
+        """list[ItemStruct] encodes as (uint256,uint128)[] in ABI type string."""
+        from eth_contract.struct import _component_type_str
+
+        comp = ContainerStruct._abi_components()
+        items_comp = next(c for c in comp if c["name"] == "items")
+        assert _component_type_str(items_comp) == "(uint256,uint128)[]"
+
+    def test_type_str_fixed_array(self):
+        """Annotated[list[ItemStruct], 'ItemStruct[2]'] → (uint256,uint128)[2]."""
+        from eth_contract.struct import _component_type_str
+
+        comp = ContainerStruct._abi_components()
+        fixed_comp = next(c for c in comp if c["name"] == "fixed_items")
+        assert _component_type_str(fixed_comp) == "(uint256,uint128)[2]"
