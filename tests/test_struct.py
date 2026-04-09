@@ -383,7 +383,7 @@ class TestInvalidAnnotation:
         with pytest.raises(ValueError, match="multi-dimensional arrays of structs"):
 
             class Bad3(ABIStruct):
-                nested: list[list[Leaf]]  # type: ignore[type-arg]
+                nested: list[list[Leaf]]  # type: ignore[misc]
 
     def test_annotated_list_wrong_struct_name_raises(self):
         """Annotated[list[S], 'Other[3]'] must raise if prefix doesn't match."""

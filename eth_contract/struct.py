@@ -125,6 +125,7 @@ def _get_inner_struct_info(
                     and suffix[0] == "["
                     and suffix[-1] == "]"
                     and suffix[1:-1].isdigit()
+                    and int(suffix[1:-1]) > 0
                 ):
                     return (inner_cls, suffix)
 
