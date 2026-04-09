@@ -286,7 +286,9 @@ class ContractEvent:
                 results.append(decoded)
         return results
 
-    def parse_log(self, log: LogReceipt, codec: ABICodec | None = None) -> EventData | None:
+    def parse_log(
+        self, log: LogReceipt, codec: ABICodec | None = None
+    ) -> EventData | None:
         try:
             return get_event_data(codec or _abi_codec, self.abi, log)
         except MismatchedABI:
