@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
+    "eth-abi>=5.0.0",
     "web3>=7.12.0",
 ]
 
@@ -20,14 +21,19 @@ dev = [
 ]
 
 [build-system]
-requires = ["setuptools>=42"]
+requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+eth_contract = ["py.typed"]
 
 [tool.black]
 line-length = 88
 
 [tool.isort]
 profile = "black"
+
+[tool.mypy]
 
 [tool.uv.sources]
 pyrevm = { git = "https://github.com/yihuang/pyrevm.git" }
