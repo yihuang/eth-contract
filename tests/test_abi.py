@@ -1,4 +1,5 @@
-from eth_typing import ABI
+import pytest
+from eth_typing import ABI, ChecksumAddress
 from hexbytes import HexBytes
 
 from eth_contract.contract import Contract, ContractEvent
@@ -34,7 +35,9 @@ def test_build_filter_no_args() -> None:
     )
     params = evt.build_filter()
     # topics[0] must always be the event signature hash
-    assert HexBytes(params["topics"][0]) == evt.topic
+    t0 = params["topics"][0]
+    assert isinstance(t0, str)
+    assert HexBytes(t0) == evt.topic
     assert "address" not in params
     assert "fromBlock" not in params
     assert "toBlock" not in params
@@ -44,10 +47,12 @@ def test_build_filter_with_address() -> None:
     evt = ContractEvent.from_abi(
         "event Transfer(address indexed from, address indexed to, uint256 value)"
     )
-    addr = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+    addr = ChecksumAddress("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
     params = evt.build_filter(address=addr)
     assert params["address"] == addr
-    assert HexBytes(params["topics"][0]) == evt.topic
+    t0 = params["topics"][0]
+    assert isinstance(t0, str)
+    assert HexBytes(t0) == evt.topic
 
 
 def test_build_filter_with_block_range() -> None:
@@ -57,7 +62,9 @@ def test_build_filter_with_block_range() -> None:
     params = evt.build_filter(from_block=100, to_block="latest")
     assert params["fromBlock"] == 100
     assert params["toBlock"] == "latest"
-    assert HexBytes(params["topics"][0]) == evt.topic
+    t0 = params["topics"][0]
+    assert isinstance(t0, str)
+    assert HexBytes(t0) == evt.topic
 
 
 def test_build_filter_with_indexed_argument() -> None:
@@ -67,10 +74,22 @@ def test_build_filter_with_indexed_argument() -> None:
     sender = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
     params = evt.build_filter(argument_filters={"from": sender})
     topics = params["topics"]
-    # topic[0] = event signature, topic[1] = encoded `from` arg, topic[2] = None (any `to`)
-    assert HexBytes(topics[0]) == evt.topic
+    # topic[0] = event sig, topic[1] = encoded `from` arg, topic[2] = None (any `to`)
+    t0 = topics[0]
+    assert isinstance(t0, str)
+    assert HexBytes(t0) == evt.topic
     # The encoded address should be left-padded to 32 bytes
-    assert topics[1] is not None
-    assert sender[2:].lower() in topics[1].lower()  # strip 0x before substring check
+    t1 = topics[1]
+    assert t1 is not None
+    assert isinstance(t1, str)
+    assert sender[2:].lower() in t1.lower()  # strip 0x before substring check
     # trailing None topics for unfiltered indexed args are stripped by web3
     assert len(topics) == 2
+
+
+def test_build_filter_with_non_indexed_argument_raises() -> None:
+    evt = ContractEvent.from_abi(
+        "event Transfer(address indexed from, address indexed to, uint256 value)"
+    )
+    with pytest.raises(ValueError, match="not an indexed parameter"):
+        evt.build_filter(argument_filters={"value": 100})

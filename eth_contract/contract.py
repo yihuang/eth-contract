@@ -49,6 +49,8 @@ from .human import (
 )
 from .utils import send_transaction
 
+_abi_codec = ABICodec(default_registry)
+
 
 @dataclass
 class ContractConstructor:
@@ -217,11 +219,27 @@ class ContractEvent:
         Returns:
             A :class:`~web3.types.FilterParams` dict ready to be passed to
             ``w3.eth.get_logs()``.
+
+        Raises:
+            ValueError: If any key in ``argument_filters`` is not an indexed
+                parameter of this event.
         """
-        codec = ABICodec(default_registry)
+        if argument_filters:
+            indexed_names = {
+                param["name"]
+                for param in self.abi.get("inputs", [])
+                if param.get("indexed", False)
+            }
+            for key in argument_filters:
+                if key not in indexed_names:
+                    raise ValueError(
+                        f"Argument '{key}' is not an indexed parameter of event "
+                        f"'{self.name}'. Only indexed parameters can be used as "
+                        f"filter arguments. Indexed parameters: {sorted(indexed_names)}"
+                    )
         _data_filters, filter_params = construct_event_filter_params(
             self.abi,
-            codec,
+            _abi_codec,
             contract_address=address,
             argument_filters=argument_filters,
             from_block=from_block,
@@ -270,7 +288,7 @@ class ContractEvent:
 
     def parse_log(self, log: LogReceipt) -> EventData | None:
         try:
-            return get_event_data(ABICodec(default_registry), self.abi, log)
+            return get_event_data(_abi_codec, self.abi, log)
         except MismatchedABI:
             return None
 
