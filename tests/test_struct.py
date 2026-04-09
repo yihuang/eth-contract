@@ -374,6 +374,39 @@ class TestInvalidAnnotation:
             class Bad2(ABIStruct):
                 x: Annotated[int, 42]  # non-string second arg
 
+    def test_nested_list_of_struct_raises(self):
+        """list[list[SomeStruct]] is not supported and must raise ValueError."""
+
+        class Leaf(ABIStruct):
+            v: int
+
+        with pytest.raises(ValueError, match="multi-dimensional arrays of structs"):
+
+            class Bad3(ABIStruct):
+                nested: list[list[Leaf]]  # type: ignore[type-arg]
+
+    def test_annotated_list_wrong_struct_name_raises(self):
+        """Annotated[list[S], 'Other[3]'] must raise if prefix doesn't match."""
+
+        class S(ABIStruct):
+            v: int
+
+        with pytest.raises(ValueError, match="must start with"):
+
+            class Bad4(ABIStruct):
+                items: Annotated[list[S], "Other[3]"]  # wrong struct name
+
+    def test_annotated_list_invalid_suffix_raises(self):
+        """Annotated[list[S], 'S[abc]'] must raise for non-numeric size."""
+
+        class S2(ABIStruct):
+            v: int
+
+        with pytest.raises(ValueError, match="must be"):
+
+            class Bad5(ABIStruct):
+                items: Annotated[list[S2], "S2[abc]"]  # non-numeric suffix
+
 
 class TestMetaclassSafeguards:
     def test_non_abistruct_base_raises(self):

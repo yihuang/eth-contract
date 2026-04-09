@@ -42,7 +42,28 @@ def _get_field_abi_type(annotation: Any, field_name: str, class_name: str) -> st
     if origin is list:
         args = get_args(annotation)
         if args:
-            elem_type = _get_field_abi_type(args[0], field_name, class_name)
+            inner = args[0]
+            # list[SomeStruct] is handled via _get_inner_struct_info; returning
+            # "tuple[]" here is consistent but the caller will use the richer
+            # component dict produced by _compute_components.
+            if isinstance(inner, type) and issubclass(inner, ABIStruct):
+                return "tuple[]"
+            # list[list[SomeStruct]] (and deeper) is not supported because
+            # _compute_components cannot attach components for multi-dimensional
+            # struct arrays.  Detect and reject early.
+            if get_origin(inner) is list:
+                inner_args = get_args(inner)
+                if inner_args and isinstance(inner_args[0], type) and issubclass(
+                    inner_args[0], ABIStruct
+                ):
+                    raise ValueError(
+                        f"Field '{field_name}' in '{class_name}': "
+                        f"multi-dimensional arrays of structs "
+                        f"(e.g. list[list[Struct]]) are not supported; "
+                        f"use Annotated[list[Struct], 'Struct[N]'] "
+                        f"for fixed-size arrays instead"
+                    )
+            elem_type = _get_field_abi_type(inner, field_name, class_name)
             return f"{elem_type}[]"
 
     raise ValueError(
@@ -85,11 +106,33 @@ def _get_inner_struct_info(
                 inner_args[0], ABIStruct
             ):
                 inner_cls = inner_args[0]
-                if abi_override and abi_override.startswith(inner_cls.__name__):
-                    suffix = abi_override[len(inner_cls.__name__):]
-                else:
-                    suffix = "[]"
-                return (inner_cls, suffix)
+                if abi_override is None:
+                    return (inner_cls, "[]")
+
+                expected_prefix = inner_cls.__name__
+                if not abi_override.startswith(expected_prefix):
+                    raise ValueError(
+                        f"Annotated list override for struct "
+                        f"'{expected_prefix}' must start with "
+                        f"'{expected_prefix}', got '{abi_override}'"
+                    )
+
+                suffix = abi_override[len(expected_prefix):]
+                if suffix == "[]":
+                    return (inner_cls, suffix)
+                if (
+                    len(suffix) >= 3
+                    and suffix[0] == "["
+                    and suffix[-1] == "]"
+                    and suffix[1:-1].isdigit()
+                ):
+                    return (inner_cls, suffix)
+
+                raise ValueError(
+                    f"Annotated list override for struct '{expected_prefix}' "
+                    f"must be '{expected_prefix}[]' or "
+                    f"'{expected_prefix}[N]' (N > 0), got '{abi_override}'"
+                )
 
         return (None, "")
 
