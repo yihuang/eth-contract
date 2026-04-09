@@ -21,8 +21,11 @@ dev = [
 ]
 
 [build-system]
-requires = ["setuptools>=42"]
+requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+eth_contract = ["py.typed"]
 
 [tool.black]
 line-length = 88
