@@ -51,19 +51,33 @@ Router = Contract.from_abi([
 
 #### Type-Annotated ABI Structs
 
-For richer Python integration, define structs as typed Python classes using `ABIStruct`. Fields are annotated with `Annotated[PythonType, 'solidity_type']`. The class behaves like a `NamedTuple` and provides `encode()` / `decode()` / `human_readable_abi()` for free:
+For richer Python integration, define structs as typed Python classes using `ABIStruct`. The class behaves like a `NamedTuple` and provides `encode()` / `decode()` / `human_readable_abi()` for free.
+
+**Supported annotation forms:**
+
+| Python annotation | Solidity ABI type |
+|---|---|
+| `Annotated[T, 'solidity_type']` | explicit type (always works) |
+| `bool` | `bool` |
+| `int` | `uint256` |
+| `str` | `string` |
+| `bytes` | `bytes` |
+| `list[bool\|int\|str\|bytes]` | `bool[]` / `uint256[]` / … |
+| `SomeStruct` (ABIStruct subclass) | `tuple` (nested struct) |
+| `list[SomeStruct]` | `tuple[]` (dynamic array of structs) |
+| `Annotated[list[SomeStruct], 'SomeStruct[N]']` | `tuple[N]` (fixed-size array of structs) |
 
 ```python
 from typing import Annotated
 from eth_contract import ABIStruct, Contract
 
 class SwapParams(ABIStruct):
-    token_in:  Annotated[str,  'address']
-    token_out: Annotated[str,  'address']
-    fee:       Annotated[int,  'uint24']
-    recipient: Annotated[str,  'address']
-    amount_in: Annotated[int,  'uint256']
-    amount_out_minimum: Annotated[int, 'uint256']
+    token_in:  Annotated[str, 'address']
+    token_out: Annotated[str, 'address']
+    fee:       Annotated[int, 'uint24']   # explicit when default doesn't fit
+    recipient: Annotated[str, 'address']
+    amount_in: int                         # default: int → uint256
+    amount_out_minimum: int
 
 # Generate the human-readable ABI fragment automatically
 print(SwapParams.human_readable_abi())
@@ -77,19 +91,32 @@ Router = Contract.from_abi(
 )
 ```
 
-`ABIStruct` supports nesting — use another `ABIStruct` subclass directly as a field type:
+`ABIStruct` supports nesting — use another `ABIStruct` subclass directly as a field type,
+or wrap it in `list[...]` for arrays of structs:
 
 ```python
 class Inner(ABIStruct):
-    x: Annotated[bool, 'bool']
+    x: bool               # default mapping: bool → bool
     y: Annotated[bytes, 'bytes32']
 
 class Outer(ABIStruct):
-    value: Annotated[int, 'uint256']
-    inner: Inner  # nested struct, no Annotated needed
+    value: int            # default mapping: int → uint256
+    inner: Inner          # single nested struct
+    inners: list[Inner]   # dynamic array of structs  → tuple[]
+    static_inners: Annotated[list[Inner], 'Inner[3]']  # fixed-size → tuple[3]
 
-encoded = Outer(value=42, inner=Inner(x=True, y=b'\x01' * 32)).encode()
-decoded = Outer.decode(encoded)
+tx = Outer(
+    value=42,
+    inner=Inner(x=True, y=b'\x01' * 32),
+    inners=(Inner(x=False, y=b'\x02' * 32),),
+    static_inners=(Inner(x=True, y=b'\x03' * 32),) * 3,
+)
+decoded = Outer.decode(tx.encode())
+assert decoded == tx
+
+print(Outer.human_readable_abi())
+# ['struct Inner { bool x; bytes32 y; }',
+#  'struct Outer { uint256 value; Inner inner; Inner[] inners; Inner[3] static_inners; }']
 ```
 
 ---

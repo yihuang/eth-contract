@@ -5,6 +5,18 @@ from typing import Any, get_args, get_origin, get_type_hints
 from eth_abi import decode as abi_decode
 from eth_abi import encode as abi_encode
 
+# ---------------------------------------------------------------------------
+# Default Python type → Solidity ABI type mappings.
+# Users can annotate fields with bare Python types (e.g. ``x: bool``) instead
+# of the more verbose ``x: Annotated[bool, 'bool']`` form.
+# ---------------------------------------------------------------------------
+_DEFAULT_TYPE_MAP: "dict[Any, str]" = {
+    bool: "bool",
+    int: "uint256",
+    str: "string",
+    bytes: "bytes",
+}
+
 
 def _get_field_abi_type(annotation: Any, field_name: str, class_name: str) -> str:
     """Return the Solidity ABI type string for a single field annotation."""
@@ -22,26 +34,120 @@ def _get_field_abi_type(annotation: Any, field_name: str, class_name: str) -> st
     if isinstance(annotation, type) and issubclass(annotation, ABIStruct):
         return "tuple"
 
+    # Default type mappings: bool, int, str, bytes
+    if annotation in _DEFAULT_TYPE_MAP:
+        return _DEFAULT_TYPE_MAP[annotation]
+
+    # list[T] → dynamic array "T[]"
+    if origin is list:
+        args = get_args(annotation)
+        if args:
+            inner = args[0]
+            # list[SomeStruct] is handled via _get_inner_struct_info; returning
+            # "tuple[]" here is consistent but the caller will use the richer
+            # component dict produced by _compute_components.
+            if isinstance(inner, type) and issubclass(inner, ABIStruct):
+                return "tuple[]"
+            # list[list[SomeStruct]] (and deeper) is not supported because
+            # _compute_components cannot attach components for multi-dimensional
+            # struct arrays.  Detect and reject early.
+            if get_origin(inner) is list:
+                inner_args = get_args(inner)
+                if inner_args and isinstance(inner_args[0], type) and issubclass(
+                    inner_args[0], ABIStruct
+                ):
+                    raise ValueError(
+                        f"Field '{field_name}' in '{class_name}': "
+                        f"multi-dimensional arrays of structs "
+                        f"(e.g. list[list[Struct]]) are not supported; "
+                        f"use Annotated[list[Struct], 'Struct[N]'] "
+                        f"for fixed-size arrays instead"
+                    )
+            elem_type = _get_field_abi_type(inner, field_name, class_name)
+            return f"{elem_type}[]"
+
     raise ValueError(
         f"Field '{field_name}' in '{class_name}' must use "
-        f"Annotated[type, 'solidity_type'] or be an ABIStruct subclass"
+        f"Annotated[type, 'solidity_type'], be an ABIStruct subclass, "
+        f"or use a type with a default mapping (bool, int, str, bytes, list)"
     )
 
 
-def _get_inner_struct(annotation: Any) -> "typing.Optional[typing.Type[ABIStruct]]":
-    """Return the nested ABIStruct class for a field annotation, or None."""
+def _get_inner_struct_info(
+    annotation: Any,
+) -> "tuple[typing.Optional[typing.Type[ABIStruct]], str]":
+    """
+    Return ``(ABIStruct subclass, array_suffix)`` when the annotation refers
+    to a struct or an array-of-structs field, otherwise ``(None, '')``.
+
+    Examples::
+
+        Inner                               → (Inner, '')
+        list[Inner]                         → (Inner, '[]')
+        Annotated[Inner, 'Inner']           → (Inner, '')
+        Annotated[list[Inner], 'Inner[3]']  → (Inner, '[3]')
+        Annotated[list[Inner], 'Inner[]']   → (Inner, '[]')
+    """
     origin = get_origin(annotation)
 
     if origin is typing.Annotated:
-        python_type = get_args(annotation)[0]
+        args = get_args(annotation)
+        python_type = args[0]
+        abi_override = args[1] if len(args) >= 2 and isinstance(args[1], str) else None
+
+        # Annotated[SomeStruct, ...]
         if isinstance(python_type, type) and issubclass(python_type, ABIStruct):
-            return python_type
-        return None
+            return (python_type, "")
 
+        # Annotated[list[SomeStruct], 'SomeStruct[N]'] or similar
+        if get_origin(python_type) is list:
+            inner_args = get_args(python_type)
+            if inner_args and isinstance(inner_args[0], type) and issubclass(
+                inner_args[0], ABIStruct
+            ):
+                inner_cls = inner_args[0]
+                if abi_override is None:
+                    return (inner_cls, "[]")
+
+                expected_prefix = inner_cls.__name__
+                if not abi_override.startswith(expected_prefix):
+                    raise ValueError(
+                        f"Annotated list override for struct "
+                        f"'{expected_prefix}' must start with "
+                        f"'{expected_prefix}', got '{abi_override}'"
+                    )
+
+                suffix = abi_override[len(expected_prefix):]
+                if suffix == "[]":
+                    return (inner_cls, suffix)
+                if (
+                    len(suffix) >= 3
+                    and suffix[0] == "["
+                    and suffix[-1] == "]"
+                    and suffix[1:-1].isdigit()
+                    and int(suffix[1:-1]) > 0
+                ):
+                    return (inner_cls, suffix)
+
+                raise ValueError(
+                    f"Annotated list override for struct '{expected_prefix}' "
+                    f"must be '{expected_prefix}[]' or "
+                    f"'{expected_prefix}[N]' (N > 0), got '{abi_override}'"
+                )
+
+        return (None, "")
+
+    # Direct ABIStruct subclass
     if isinstance(annotation, type) and issubclass(annotation, ABIStruct):
-        return annotation
+        return (annotation, "")
 
-    return None
+    # list[SomeStruct] → dynamic array of structs
+    if origin is list:
+        args = get_args(annotation)
+        if args and isinstance(args[0], type) and issubclass(args[0], ABIStruct):
+            return (args[0], "[]")
+
+    return (None, "")
 
 
 def _component_type_str(component: dict) -> str:
@@ -69,7 +175,14 @@ def _prepare_values(instance: Any, components: list) -> tuple:
     for i, comp in enumerate(components):
         val = instance[i]
         if "components" in comp:
-            values.append(_prepare_values(val, comp["components"]))
+            if comp["type"] == "tuple":
+                # Single nested struct
+                values.append(_prepare_values(val, comp["components"]))
+            else:
+                # Array of structs: tuple[], tuple[N], etc.
+                values.append(
+                    tuple(_prepare_values(elem, comp["components"]) for elem in val)
+                )
         else:
             values.append(val)
     return tuple(values)
@@ -86,9 +199,14 @@ def _build_instance(cls: Any, values: Any) -> Any:
     for i, field_name in enumerate(fields):
         val = values[i]
         annotation = hints[field_name]
-        inner_cls = _get_inner_struct(annotation)
+        inner_cls, suffix = _get_inner_struct_info(annotation)
         if inner_cls is not None:
-            val = _build_instance(inner_cls, val)
+            if suffix == "":
+                # Single nested struct
+                val = _build_instance(inner_cls, val)
+            else:
+                # Array of structs
+                val = tuple(_build_instance(inner_cls, elem) for elem in val)
         kwargs[field_name] = val
 
     return cls(**kwargs)
@@ -98,6 +216,7 @@ def _compute_components(cls: Any) -> list:
     """
     Compute the ordered list of ABI component dicts for a struct class.
     Nested structs use their already-cached ``_abi_components_cache``.
+    Arrays of structs produce ``"tuple[]"`` / ``"tuple[N]"`` component types.
     """
     hints = get_type_hints(cls, include_extras=True)
     fields = cls._fields
@@ -106,11 +225,11 @@ def _compute_components(cls: Any) -> list:
     for field_name in fields:
         annotation = hints[field_name]
         abi_type = _get_field_abi_type(annotation, field_name, cls.__name__)
-        inner_cls = _get_inner_struct(annotation)
+        inner_cls, suffix = _get_inner_struct_info(annotation)
 
         component: dict = {"name": field_name}
         if inner_cls is not None:
-            component["type"] = "tuple"
+            component["type"] = f"tuple{suffix}"
             component["components"] = inner_cls._abi_components_cache
         else:
             component["type"] = abi_type
@@ -141,9 +260,40 @@ def _collect_hra(cls: Any, seen: "dict[str, str]") -> None:
                     f"type but the second argument must be a Solidity type string"
                 )
             solidity_type = args[1]
+            # Recurse if the python type wraps an ABIStruct (direct or in list)
+            python_type = args[0]
+            if isinstance(python_type, type) and issubclass(python_type, ABIStruct):
+                _collect_hra(python_type, seen)
+            elif get_origin(python_type) is list:
+                inner_args = get_args(python_type)
+                if inner_args and isinstance(inner_args[0], type) and issubclass(
+                    inner_args[0], ABIStruct
+                ):
+                    _collect_hra(inner_args[0], seen)
         elif isinstance(annotation, type) and issubclass(annotation, ABIStruct):
             _collect_hra(annotation, seen)
             solidity_type = annotation.__name__
+        elif annotation in _DEFAULT_TYPE_MAP:
+            solidity_type = _DEFAULT_TYPE_MAP[annotation]
+        elif origin is list:
+            list_args = get_args(annotation)
+            if list_args:
+                elem = list_args[0]
+                if isinstance(elem, type) and issubclass(elem, ABIStruct):
+                    _collect_hra(elem, seen)
+                    solidity_type = f"{elem.__name__}[]"
+                elif elem in _DEFAULT_TYPE_MAP:
+                    solidity_type = f"{_DEFAULT_TYPE_MAP[elem]}[]"
+                else:
+                    raise ValueError(
+                        f"Cannot determine Solidity type for field '{field_name}' "
+                        f"in '{cls.__name__}': unsupported list element type"
+                    )
+            else:
+                raise ValueError(
+                    f"Cannot determine Solidity type for field '{field_name}' "
+                    f"in '{cls.__name__}'"
+                )
         else:
             raise ValueError(
                 f"Cannot determine Solidity type for field '{field_name}'"
@@ -258,11 +408,21 @@ class ABIStruct(metaclass=ABIStructMeta):
     """
     Base class for ABI-encodable structs defined in pure Python.
 
-    Subclass ``ABIStruct`` and annotate every field with
-    ``Annotated[PythonType, 'solidity_type']``.  A nested ``ABIStruct``
-    subclass may be used directly as a field type (the Solidity type is
-    inferred as ``tuple``).  Fields from a parent ``ABIStruct`` are
-    automatically inherited when a subclass adds new fields.
+    Subclass ``ABIStruct`` and annotate every field.  Supported annotation
+    forms (in order of preference):
+
+    * ``Annotated[PythonType, 'solidity_type']`` – explicit Solidity type
+    * A nested ``ABIStruct`` subclass used directly as the field type
+    * ``list[SomeStruct]`` – dynamic array of a nested struct (``tuple[]``)
+    * ``Annotated[list[SomeStruct], 'SomeStruct[N]']`` – fixed-size array of a
+      nested struct (``tuple[N]``)
+    * Plain Python types with automatic default mappings:
+      ``bool`` → ``bool``, ``int`` → ``uint256``, ``str`` → ``string``,
+      ``bytes`` → ``bytes``
+    * ``list[bool|int|str|bytes]`` – dynamic array of a mapped primitive type
+
+    Fields from a parent ``ABIStruct`` are automatically inherited when a
+    subclass adds new fields.
 
     The resulting class behaves like a ``NamedTuple`` (immutable, indexable,
     positional and keyword construction) and additionally provides:
@@ -281,15 +441,17 @@ class ABIStruct(metaclass=ABIStructMeta):
         from eth_contract.struct import ABIStruct
 
         class Inner(ABIStruct):
-            x: Annotated[bool, 'bool']
+            x: bool          # default mapping: bool → bool
             y: Annotated[bytes, 'bytes32']
 
         class Transfer(ABIStruct):
             from_addr: Annotated[str, 'address']
             to_addr: Annotated[str, 'address']
-            value: Annotated[int, 'uint256']
-            memo: Annotated[str, 'string']
-            inner: Inner
+            value: int                  # default mapping: int → uint256
+            memo: str                   # default mapping: str → string
+            inner: Inner                # single nested struct
+            inners: list[Inner]         # dynamic array of structs
+            static_inners: Annotated[list[Inner], 'Inner[3]']  # fixed-size
 
         tx = Transfer(
             from_addr='0x1111111111111111111111111111111111111111',
@@ -297,6 +459,12 @@ class ABIStruct(metaclass=ABIStructMeta):
             value=10**18,
             memo='Hello, Ethereum!',
             inner=Inner(x=True, y=b'\\x01' * 32),
+            inners=(Inner(x=False, y=b'\\x02' * 32),),
+            static_inners=(
+                Inner(x=True, y=b'\\x03' * 32),
+                Inner(x=False, y=b'\\x04' * 32),
+                Inner(x=True, y=b'\\x05' * 32),
+            ),
         )
         encoded = tx.encode()
         decoded = Transfer.decode(encoded)
