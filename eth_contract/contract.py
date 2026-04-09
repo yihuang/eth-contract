@@ -25,10 +25,12 @@ from hexbytes import HexBytes
 from typing_extensions import Unpack
 from web3 import AsyncWeb3
 from web3._utils.events import get_event_data
+from web3._utils.filters import construct_event_filter_params
 from web3.exceptions import MismatchedABI
 from web3.types import (
     BlockIdentifier,
     EventData,
+    FilterParams,
     LogReceipt,
     StateOverride,
     TxParams,
@@ -46,6 +48,8 @@ from .human import (
     process_multiline,
 )
 from .utils import send_transaction
+
+_abi_codec = ABICodec(default_registry)
 
 
 @dataclass
@@ -193,9 +197,100 @@ class ContractEvent:
             self._topic = keccak(text=self.signature)
         return self._topic
 
-    def parse_log(self, log: LogReceipt) -> EventData | None:
+    def build_filter(
+        self,
+        address: ChecksumAddress | list[ChecksumAddress] | None = None,
+        argument_filters: dict[str, Any] | None = None,
+        from_block: BlockIdentifier | None = None,
+        to_block: BlockIdentifier | None = None,
+    ) -> FilterParams:
+        """
+        Build filter parameters suitable for ``eth_getLogs``.
+
+        Args:
+            address: Contract address or list of addresses to filter by.
+            argument_filters: Mapping of indexed argument names to values to
+                filter on (e.g. ``{"from": "0x..."}``)
+            from_block: Starting block (inclusive). Defaults to the node's
+                default when omitted.
+            to_block: Ending block (inclusive). Defaults to the node's default
+                when omitted.
+
+        Returns:
+            A :class:`~web3.types.FilterParams` dict ready to be passed to
+            ``w3.eth.get_logs()``.
+
+        Raises:
+            ValueError: If any key in ``argument_filters`` is not an indexed
+                parameter of this event.
+        """
+        if argument_filters:
+            indexed_names = {
+                param["name"]
+                for param in self.abi.get("inputs", [])
+                if param.get("indexed", False)
+            }
+            for key in argument_filters:
+                if key not in indexed_names:
+                    raise ValueError(
+                        f"Argument '{key}' is not an indexed parameter of event "
+                        f"'{self.name}'. Only indexed parameters can be used as "
+                        f"filter arguments. Indexed parameters: {sorted(indexed_names)}"
+                    )
+        _data_filters, filter_params = construct_event_filter_params(
+            self.abi,
+            _abi_codec,
+            contract_address=address,
+            argument_filters=argument_filters,
+            from_block=from_block,
+            to_block=to_block,
+        )
+        return filter_params
+
+    async def get_logs(
+        self,
+        w3: AsyncWeb3,
+        address: ChecksumAddress | list[ChecksumAddress] | None = None,
+        argument_filters: dict[str, Any] | None = None,
+        from_block: BlockIdentifier | None = None,
+        to_block: BlockIdentifier | None = None,
+    ) -> list[EventData]:
+        """
+        Fetch and decode matching logs from the chain.
+
+        Calls ``eth_getLogs`` using the filter built by :meth:`build_filter`
+        and decodes each returned log with :meth:`parse_log`.
+
+        Args:
+            w3: An async Web3 instance.
+            address: Contract address or list of addresses to filter by.
+            argument_filters: Mapping of indexed argument names to filter
+                values (e.g. ``{"from": "0x..."}``)
+            from_block: Starting block (inclusive).
+            to_block: Ending block (inclusive).
+
+        Returns:
+            List of decoded :class:`~web3.types.EventData` entries.
+        """
+        filter_params = self.build_filter(
+            address=address,
+            argument_filters=argument_filters,
+            from_block=from_block,
+            to_block=to_block,
+        )
+        logs = await w3.eth.get_logs(filter_params)
+        results: list[EventData] = []
+        for log in logs:
+            decoded = self.parse_log(log, codec=w3.codec)
+            if decoded is not None:
+                results.append(decoded)
+        return results
+
+    def parse_log(
+        self, log: LogReceipt, codec: ABICodec | None = None
+    ) -> EventData | None:
         try:
-            return get_event_data(ABICodec(default_registry), self.abi, log)
+            return get_event_data(codec or _abi_codec, self.abi, log)
         except MismatchedABI:
             return None
 
