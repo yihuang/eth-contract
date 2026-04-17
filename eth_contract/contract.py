@@ -152,7 +152,7 @@ class ContractFunction:
         )
         return self.decode(return_data)
 
-    def decode(self, data: bytes, codec=None) -> Any:
+    def decode(self, data: bytes, codec: ABICodec | None = None) -> Any:
         codec = codec or _abi_codec
         data = codec.decode(self.output_types, data)
         return data[0] if len(data) == 1 else data
