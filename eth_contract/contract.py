@@ -5,7 +5,6 @@ from copy import copy
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence, cast
 
-from eth_abi import encode
 from eth_abi.codec import ABICodec
 from eth_abi.registry import registry as default_registry
 from eth_account.signers.base import BaseAccount
@@ -64,7 +63,7 @@ class ContractConstructor:
         Call the constructor with the given arguments.
         """
         self.arguments = get_normalized_abi_inputs(self.abi, *args, **kwargs)
-        self.data = encode(self.input_types, self.arguments)
+        self.data = _abi_codec.encode(self.input_types, self.arguments)
         return self
 
 
@@ -128,7 +127,7 @@ class ContractFunction:
         self = copy(self)
         self._resolve_to(matched[0])
         self.arguments = get_normalized_abi_inputs(self.abi, *args, **kwargs)
-        self.encoded_args = encode(self.input_types, self.arguments)
+        self.encoded_args = _abi_codec.encode(self.input_types, self.arguments)
         self.data = HexBytes(self.selector + self.encoded_args)
         return self
 
@@ -151,12 +150,12 @@ class ContractFunction:
             state_override=state_override,
             ccip_read_enabled=ccip_read_enabled,
         )
-        return self.decode(return_data, codec=w3.codec)
+        return self.decode(return_data)
 
-    def decode(self, data: bytes, codec=None) -> Any:
-        codec = codec or ABICodec(default_registry)
-        data = codec.decode(self.output_types, data)
-        return data[0] if len(data) == 1 else data
+    def decode(self, data: bytes, codec: ABICodec | None = None) -> Any:
+        codec = codec or _abi_codec
+        result = codec.decode(self.output_types, data)
+        return result[0] if len(result) == 1 else result
 
     async def transact(
         self, w3: AsyncWeb3, acct: BaseAccount | ChecksumAddress, **tx: Unpack[TxParams]
