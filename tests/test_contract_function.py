@@ -1,4 +1,7 @@
 import pytest
+from eth_abi.codec import ABICodec
+from eth_abi.decoding import AddressDecoder
+from eth_abi.registry import registry as default_registry
 from eth_typing import ABIFunction
 
 from eth_contract.contract import ContractFunction
@@ -110,3 +113,24 @@ class TestContractFunctionFromABI:
         assert fn_string.selector == fn_dict.selector
         assert fn_string.input_types == fn_dict.input_types
         assert fn_string.output_types == fn_dict.output_types
+
+    def test_monkey_patch_codec(self) -> None:
+        fn = ContractFunction.from_abi("function sender() returns (address)")
+        addr = fn.decode(b"\x00" * 32)
+        assert addr == "0x0000000000000000000000000000000000000000"
+
+        class AddressBytesDecoder(AddressDecoder):
+            @staticmethod
+            def decoder_fn(data):
+                return data
+
+        reg = default_registry.copy()
+        reg.unregister_decoder("address")
+        reg.register_decoder("address", AddressBytesDecoder, label="address_bytes")
+
+        import eth_contract.contract
+
+        eth_contract.contract._abi_codec = ABICodec(reg)
+
+        addr = fn.decode(b"\x00" * 32)
+        assert addr == b"\x00" * 20
