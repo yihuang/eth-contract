@@ -154,8 +154,8 @@ class ContractFunction:
 
     def decode(self, data: bytes, codec: ABICodec | None = None) -> Any:
         codec = codec or _abi_codec
-        data = codec.decode(self.output_types, data)
-        return data[0] if len(data) == 1 else data
+        result = codec.decode(self.output_types, data)
+        return result[0] if len(result) == 1 else result
 
     async def transact(
         self, w3: AsyncWeb3, acct: BaseAccount | ChecksumAddress, **tx: Unpack[TxParams]
