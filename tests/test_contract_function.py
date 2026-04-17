@@ -130,7 +130,11 @@ class TestContractFunctionFromABI:
 
         import eth_contract.contract
 
+        old_codec = eth_contract.contract._abi_codec
         eth_contract.contract._abi_codec = ABICodec(reg)
 
         addr = fn.decode(b"\x00" * 32)
         assert addr == b"\x00" * 20
+
+        # restore
+        eth_contract.contract._abi_codec = old_codec
