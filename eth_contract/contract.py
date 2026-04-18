@@ -293,6 +293,13 @@ class ContractEvent:
         except MismatchedABI:
             return None
 
+    def process_receipt(self, receipt: TxReceipt) -> list[EventData]:
+        return [
+            decoded
+            for log in receipt["logs"]
+            if (decoded := self.parse_log(log)) is not None
+        ]
+
 
 @dataclass
 class ContractFunctions:
@@ -359,6 +366,12 @@ class Contract:
 
         if filter_abi_by_type("fallback", self.abi):
             self.fallback = ContractFunction([{"type": "function", "name": "fallback"}])
+
+    def encode_abi(self, fn_name: str, args: Sequence[Any] = ()) -> HexBytes:
+        """
+        Encode a function call and return the calldata as HexBytes.
+        """
+        return getattr(self.fns, fn_name)(*args).data
 
     def __call__(self, **tx: Unpack[TxParams]) -> Contract:
         """
