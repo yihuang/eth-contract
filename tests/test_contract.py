@@ -72,9 +72,9 @@ class TestContractFromABI:
                 "name": "transfer",
                 "inputs": [
                     {"name": "to", "type": "address"},
-                    {"name": "amount", "type": "uint256"}
+                    {"name": "amount", "type": "uint256"},
                 ],
-                "stateMutability": "nonpayable"
+                "stateMutability": "nonpayable",
             },
             {
                 "type": "event",
@@ -82,9 +82,9 @@ class TestContractFromABI:
                 "inputs": [
                     {"name": "from", "type": "address", "indexed": True},
                     {"name": "to", "type": "address", "indexed": True},
-                    {"name": "amount", "type": "uint256"}
-                ]
-            }
+                    {"name": "amount", "type": "uint256"},
+                ],
+            },
         ]
 
         contract = Contract.from_abi(parsed_abi)
@@ -227,9 +227,11 @@ class TestContractFromABI:
 
     def test_encode_abi(self):
         """Test that encode_abi returns HexBytes with selector + encoded args."""
-        contract = Contract.from_abi([
-            "function transfer(address to, uint256 amount) external",
-        ])
+        contract = Contract.from_abi(
+            [
+                "function transfer(address to, uint256 amount) external",
+            ]
+        )
         to = "0x" + "ab" * 20
         amount = 1000
 
@@ -278,7 +280,11 @@ class TestProcessReceipt:
 
         events = ERC20.events.Transfer.process_receipt(receipt)
         assert len(events) == 1
-        assert events[0]["args"] == {"from": ZERO_ADDRESS, "to": owner, "amount": amount}
+        assert events[0]["args"] == {
+            "from": ZERO_ADDRESS,
+            "to": owner,
+            "amount": amount,
+        }
         assert ERC20.events.Approval.process_receipt(receipt) == []
 
     def test_multiple_matching_events(self):
@@ -303,11 +309,16 @@ class TestProcessReceipt:
                 "removed": False,
             }
 
-        receipt = cast(TxReceipt, {"logs": [make_log(addr_a, addr_b, 500), make_log(addr_b, addr_a, 250)]})
+        receipt = cast(
+            TxReceipt,
+            {"logs": [make_log(addr_a, addr_b, 500), make_log(addr_b, addr_a, 250)]},
+        )
         events = transfer_event.process_receipt(receipt)
         assert len(events) == 2
         assert events[0]["args"]["amount"] == 500
         assert events[1]["args"]["amount"] == 250
 
     def test_empty_logs_returns_empty(self):
-        assert ERC20.events.Transfer.process_receipt(cast(TxReceipt, {"logs": []})) == []
+        assert (
+            ERC20.events.Transfer.process_receipt(cast(TxReceipt, {"logs": []})) == []
+        )
