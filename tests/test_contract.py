@@ -235,11 +235,9 @@ class TestContractFromABI:
         to = "0x" + "ab" * 20
         amount = 1000
 
-        result = contract.fns["transfer"](to, amount)
+        result = contract.fns.transfer(to, amount).data
 
         assert isinstance(result, HexBytes)
-        # Matches manually calling the function
-        assert result == contract.fns.transfer(to, amount).data
         # selector is first 4 bytes
         assert result[:4] == contract.fns.transfer.selector
 
@@ -278,14 +276,14 @@ class TestProcessReceipt:
 
         receipt = await ERC20.fns.mint(owner, amount).transact(w3, owner, to=token)
 
-        events = ERC20.events.Transfer.process_receipt(receipt)
+        events = ERC20.events.Transfer.parse_logs(receipt["logs"])
         assert len(events) == 1
         assert events[0]["args"] == {
             "from": ZERO_ADDRESS,
             "to": owner,
             "amount": amount,
         }
-        assert ERC20.events.Approval.process_receipt(receipt) == []
+        assert ERC20.events.Approval.parse_logs(receipt["logs"]) == []
 
     def test_multiple_matching_events(self):
         transfer_event = ERC20.events.Transfer
@@ -320,5 +318,6 @@ class TestProcessReceipt:
 
     def test_empty_logs_returns_empty(self):
         assert (
-            ERC20.events.Transfer.process_receipt(cast(TxReceipt, {"logs": []})) == []
+            ERC20.events.Transfer.parse_logs(cast(TxReceipt, {"logs": []})["logs"])
+            == []
         )
