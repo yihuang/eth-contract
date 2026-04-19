@@ -235,7 +235,7 @@ class TestContractFromABI:
         to = "0x" + "ab" * 20
         amount = 1000
 
-        result = contract.encode_abi("transfer", [to, amount])
+        result = contract.fns["transfer"](to, amount)
 
         assert isinstance(result, HexBytes)
         # Matches manually calling the function
@@ -313,7 +313,7 @@ class TestProcessReceipt:
             TxReceipt,
             {"logs": [make_log(addr_a, addr_b, 500), make_log(addr_b, addr_a, 250)]},
         )
-        events = transfer_event.process_receipt(receipt)
+        events = transfer_event.parse_logs(receipt["logs"])
         assert len(events) == 2
         assert events[0]["args"]["amount"] == 500
         assert events[1]["args"]["amount"] == 250
