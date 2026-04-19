@@ -278,12 +278,7 @@ class ContractEvent:
             to_block=to_block,
         )
         logs = await w3.eth.get_logs(filter_params)
-        results: list[EventData] = []
-        for log in logs:
-            decoded = self.parse_log(log, codec=w3.codec)
-            if decoded is not None:
-                results.append(decoded)
-        return results
+        return self.parse_logs(logs, codec=w3.codec)
 
     def parse_log(
         self, log: LogReceipt, codec: ABICodec | None = None
@@ -292,6 +287,15 @@ class ContractEvent:
             return get_event_data(codec or _abi_codec, self.abi, log)
         except MismatchedABI:
             return None
+
+    def parse_logs(
+        self, logs: Sequence[LogReceipt], codec: ABICodec | None = None
+    ) -> list[EventData]:
+        return [
+            decoded
+            for log in logs
+            if (decoded := self.parse_log(log, codec=codec)) is not None
+        ]
 
 
 @dataclass
@@ -304,10 +308,9 @@ class ContractFunctions:
         try:
             return self._functions[name]
         except KeyError:
-            try:
-                abis = self._abis[name]
-            except KeyError:
+            if not self._abis.get(name):
                 raise AttributeError(f"No such function: {name}")
+            abis = self._abis[name]
 
             fn = ContractFunction(abis, parent=self._parent)
             self._functions[name] = fn

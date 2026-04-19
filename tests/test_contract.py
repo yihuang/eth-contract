@@ -1,9 +1,18 @@
+from typing import cast
+
 import pytest
+from eth_abi.abi import encode
+from hexbytes import HexBytes
+from web3.types import TxReceipt
 
 from eth_contract import Contract, entrypoint
 from eth_contract.create2 import create2_address
+from eth_contract.deploy_utils import ensure_deployed_by_create2
+from eth_contract.erc20 import ERC20
 from eth_contract.history_storage import HISTORY_STORAGE_ADDRESS
-from eth_contract.utils import get_initcode
+from eth_contract.utils import ZERO_ADDRESS, get_initcode
+
+from .contracts import MockERC20_ARTIFACT
 
 
 def test_contract_addresses():
@@ -63,9 +72,9 @@ class TestContractFromABI:
                 "name": "transfer",
                 "inputs": [
                     {"name": "to", "type": "address"},
-                    {"name": "amount", "type": "uint256"}
+                    {"name": "amount", "type": "uint256"},
                 ],
-                "stateMutability": "nonpayable"
+                "stateMutability": "nonpayable",
             },
             {
                 "type": "event",
@@ -73,9 +82,9 @@ class TestContractFromABI:
                 "inputs": [
                     {"name": "from", "type": "address", "indexed": True},
                     {"name": "to", "type": "address", "indexed": True},
-                    {"name": "amount", "type": "uint256"}
-                ]
-            }
+                    {"name": "amount", "type": "uint256"},
+                ],
+            },
         ]
 
         contract = Contract.from_abi(parsed_abi)
@@ -216,6 +225,22 @@ class TestContractFromABI:
         assert "transfer(address,uint256)" in transfer_fn.signature
         assert "balanceOf(address)" in balance_of_fn.signature
 
+    def test_encode_abi(self):
+        """Test that encode_abi returns HexBytes with selector + encoded args."""
+        contract = Contract.from_abi(
+            [
+                "function transfer(address to, uint256 amount) external",
+            ]
+        )
+        to = "0x" + "ab" * 20
+        amount = 1000
+
+        result = contract.fns.transfer(to, amount).data
+
+        assert isinstance(result, HexBytes)
+        # selector is first 4 bytes
+        assert result[:4] == contract.fns.transfer.selector
+
     def test_from_abi_event_access(self):
         """Test that events can be accessed."""
         signatures = [
@@ -236,3 +261,63 @@ class TestContractFromABI:
         # Verify event signatures
         assert "Transfer(address,address,uint256)" in transfer_event.signature
         assert "Approval(address,address,uint256)" in approval_event.signature
+
+
+class TestParseLogs:
+    """Test ContractEvent.parse_logs."""
+
+    @pytest.mark.asyncio
+    async def test_decodes_and_filters(self, w3):
+        owner = (await w3.eth.accounts)[0]
+        token = await ensure_deployed_by_create2(
+            w3, owner, get_initcode(MockERC20_ARTIFACT, "T", "T", 18), salt=401
+        )
+        amount = 1000
+
+        receipt = await ERC20.fns.mint(owner, amount).transact(w3, owner, to=token)
+
+        events = ERC20.events.Transfer.parse_logs(receipt["logs"])
+        assert len(events) == 1
+        assert events[0]["args"] == {
+            "from": ZERO_ADDRESS,
+            "to": owner,
+            "amount": amount,
+        }
+        assert ERC20.events.Approval.parse_logs(receipt["logs"]) == []
+
+    def test_multiple_matching_events(self):
+        transfer_event = ERC20.events.Transfer
+        addr_a = "0x" + "aa" * 20
+        addr_b = "0x" + "bb" * 20
+
+        def make_log(from_addr, to_addr, amount):
+            return {
+                "address": to_addr,
+                "topics": [
+                    transfer_event.topic,
+                    HexBytes(bytes(12) + bytes.fromhex(from_addr[2:])),
+                    HexBytes(bytes(12) + bytes.fromhex(to_addr[2:])),
+                ],
+                "data": HexBytes(encode(["uint256"], [amount])),
+                "blockHash": HexBytes(b"\x00" * 32),
+                "blockNumber": 1,
+                "transactionHash": HexBytes(b"\x00" * 32),
+                "transactionIndex": 0,
+                "logIndex": 0,
+                "removed": False,
+            }
+
+        receipt = cast(
+            TxReceipt,
+            {"logs": [make_log(addr_a, addr_b, 500), make_log(addr_b, addr_a, 250)]},
+        )
+        events = transfer_event.parse_logs(receipt["logs"])
+        assert len(events) == 2
+        assert events[0]["args"]["amount"] == 500
+        assert events[1]["args"]["amount"] == 250
+
+    def test_empty_logs_returns_empty(self):
+        assert (
+            ERC20.events.Transfer.parse_logs(cast(TxReceipt, {"logs": []})["logs"])
+            == []
+        )
