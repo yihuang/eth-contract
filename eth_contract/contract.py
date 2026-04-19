@@ -278,12 +278,7 @@ class ContractEvent:
             to_block=to_block,
         )
         logs = await w3.eth.get_logs(filter_params)
-        results: list[EventData] = []
-        for log in logs:
-            decoded = self.parse_log(log, codec=w3.codec)
-            if decoded is not None:
-                results.append(decoded)
-        return results
+        return self.parse_logs(logs, codec=w3.codec)
 
     def parse_log(
         self, log: LogReceipt, codec: ABICodec | None = None
@@ -293,12 +288,17 @@ class ContractEvent:
         except MismatchedABI:
             return None
 
-    def process_receipt(self, receipt: TxReceipt) -> list[EventData]:
+    def parse_logs(
+        self, logs: Sequence[LogReceipt], codec: ABICodec | None = None
+    ) -> list[EventData]:
         return [
             decoded
-            for log in receipt["logs"]
-            if (decoded := self.parse_log(log)) is not None
+            for log in logs
+            if (decoded := self.parse_log(log, codec=codec)) is not None
         ]
+
+    def process_receipt(self, receipt: TxReceipt) -> list[EventData]:
+        return self.parse_logs(receipt["logs"])
 
 
 @dataclass
@@ -311,10 +311,9 @@ class ContractFunctions:
         try:
             return self._functions[name]
         except KeyError:
-            try:
-                abis = self._abis[name]
-            except KeyError:
+            if name not in self._abis or not self._abis[name]:
                 raise AttributeError(f"No such function: {name}")
+            abis = self._abis[name]
 
             fn = ContractFunction(abis, parent=self._parent)
             self._functions[name] = fn
@@ -372,6 +371,11 @@ class Contract:
         Encode a function call and return the calldata as HexBytes.
         """
         return getattr(self.fns, fn_name)(*args).data
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return getattr(self.fns, name)
 
     def __call__(self, **tx: Unpack[TxParams]) -> Contract:
         """
