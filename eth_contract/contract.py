@@ -297,8 +297,10 @@ class ContractEvent:
             if (decoded := self.parse_log(log, codec=codec)) is not None
         ]
 
-    def process_receipt(self, receipt: TxReceipt) -> list[EventData]:
-        return self.parse_logs(receipt["logs"])
+    def process_receipt(
+        self, receipt: TxReceipt, codec: ABICodec | None = None
+    ) -> list[EventData]:
+        return self.parse_logs(receipt["logs"], codec=codec)
 
 
 @dataclass
@@ -366,11 +368,21 @@ class Contract:
         if filter_abi_by_type("fallback", self.abi):
             self.fallback = ContractFunction([{"type": "function", "name": "fallback"}])
 
-    def encode_abi(self, fn_name: str, args: Sequence[Any] = ()) -> HexBytes:
+    def encode_abi(
+        self,
+        fn_name: str,
+        args: Sequence[Any] = (),
+        kwargs: Mapping[str, Any] | None = None,
+    ) -> HexBytes:
         """
         Encode a function call and return the calldata as HexBytes.
+
+        Args:
+            fn_name: Function name to encode
+            args: Optional positional function arguments
+            kwargs: Optional keyword function arguments
         """
-        return getattr(self.fns, fn_name)(*args).data
+        return getattr(self.fns, fn_name)(*args, **(kwargs or {})).data
 
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_"):
