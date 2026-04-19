@@ -263,8 +263,8 @@ class TestContractFromABI:
         assert "Approval(address,address,uint256)" in approval_event.signature
 
 
-class TestProcessReceipt:
-    """Test ContractEvent.process_receipt."""
+class TestParseLogs:
+    """Test ContractEvent.parse_logs."""
 
     @pytest.mark.asyncio
     async def test_decodes_and_filters(self, w3):
