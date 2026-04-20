@@ -59,6 +59,7 @@ async def test_pyrevm_supply_slot_tracing():
     # Capture and parse traces
     vm = pyrevm.EVM(fork_url=ETH_MAINNET_FORK, tracing=True, with_memory=True)
     w3 = AsyncWeb3(AsyncHTTPProvider(ETH_MAINNET_FORK))
+    block = await w3.eth.block_number
     for name, token in tokens:
         print("Testing", name, token)
         traces = trace_call(vm, to=token, data=fn.data)
@@ -69,7 +70,9 @@ async def test_pyrevm_supply_slot_tracing():
         new_total = int.from_bytes(bz, "big")
         if not slot:
             # WETH case: totalSupply = address(this).balance
-            assert await fn.call(w3, to=token) == await w3.eth.get_balance(token)
+            assert await fn.call(
+                w3, to=token, block_identifier=block
+            ) == await w3.eth.get_balance(token, block)
             # verify the slot with state overrides
             assert new_total == await fn.call(
                 w3, to=token, state_override={token: {"balance": hex(new_total)}}
