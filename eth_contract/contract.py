@@ -153,9 +153,34 @@ class ContractFunction:
         return self.decode(return_data)
 
     def decode(self, data: bytes, codec: ABICodec | None = None) -> Any:
+        """Decode return data against :attr:`output_types`."""
         codec = codec or _abi_codec
         result = codec.decode(self.output_types, data)
         return result[0] if len(result) == 1 else result
+
+    def decode_input(self, data: bytes, codec: ABICodec | None = None) -> Any:
+        """Decode full calldata (selector + args) against the matching overload.
+
+        The leading 4 bytes select which overload to decode against;
+        :class:`ValueError` is raised if no overload's selector matches.
+        Body-only payloads are rejected because a first arg whose bytes
+        equal the selector would be indistinguishable from a full call.
+        """
+        codec = codec or _abi_codec
+        leading = data[:4]
+        overloads = [
+            (function_signature_to_4byte_selector(abi_to_signature(abi)), abi)
+            for abi in self.abis
+        ]
+        for sel, abi in overloads:
+            if sel == leading:
+                result = codec.decode(get_abi_input_types(abi), data[4:])
+                return result[0] if len(result) == 1 else result
+        expected = ", ".join("0x" + s.hex() for s, _ in overloads)
+        raise ValueError(
+            f"selector mismatch for {self.signature}: "
+            f"got 0x{leading.hex()}, expected one of [{expected}]"
+        )
 
     async def transact(
         self, w3: AsyncWeb3, acct: BaseAccount | ChecksumAddress, **tx: Unpack[TxParams]

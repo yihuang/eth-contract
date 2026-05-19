@@ -4,7 +4,7 @@ from eth_abi.decoding import AddressDecoder
 from eth_abi.registry import registry as default_registry
 from eth_typing import ABIFunction
 
-from eth_contract.contract import ContractFunction
+from eth_contract.contract import Contract, ContractFunction
 
 
 class TestContractFunctionFromABI:
@@ -139,3 +139,80 @@ class TestContractFunctionFromABI:
         finally:
             # restore
             eth_contract.contract._abi_codec = old_codec
+
+
+@pytest.mark.parametrize(
+    "signature,args,expected",
+    [
+        (
+            "function transfer(address,uint256)",
+            (b"\xaa" * 20, 1000),
+            ("0x" + "aa" * 20, 1000),
+        ),
+        (
+            "function supply(address,uint256,address,uint16)",
+            (b"\xee" * 20, 12345, b"\xff" * 20, 99),
+            ("0x" + "ee" * 20, 12345, "0x" + "ff" * 20, 99),
+        ),
+        (
+            "function flashLoanSimple(address,address,uint256,bytes,uint16)",
+            (b"\xcc" * 20, b"\xdd" * 20, 1_000_000, b"\xde\xad\xbe\xef", 0),
+            ("0x" + "cc" * 20, "0x" + "dd" * 20, 1_000_000, b"\xde\xad\xbe\xef", 0),
+        ),
+    ],
+    ids=["static", "multi-arg", "dynamic-bytes"],
+)
+def test_decode_input_round_trip(signature: str, args: tuple, expected: tuple) -> None:
+    """Encode then decode_input recovers every argument."""
+    fn = ContractFunction.from_abi(signature)
+    assert tuple(fn.decode_input(fn(*args).data)) == expected
+
+
+def test_decode_input_single_arg_unwrapped() -> None:
+    """Single-input functions return the value directly."""
+    fn = ContractFunction.from_abi("function setUserEMode(uint8)")
+    assert fn.decode_input(fn(7).data) == 7
+
+
+def test_decode_input_rejects_selector_mismatch() -> None:
+    """Body-only payloads (no selector prefix) must be rejected."""
+    fn = ContractFunction.from_abi("function transfer(address,uint256)")
+    body = bytes(fn(b"\xbb" * 20, 42).data)[4:]
+    with pytest.raises(ValueError, match="selector mismatch"):
+        fn.decode_input(body)
+
+
+def test_decode_input_does_not_strip_bytes4_arg_equal_to_selector() -> None:
+    """A first arg whose value equals the selector must still decode cleanly."""
+    fn = ContractFunction.from_abi("function setMagic(bytes4,uint256)")
+    magic, nonce = fn.decode_input(fn(bytes(fn.selector), 7).data)
+    assert magic == bytes(fn.selector)
+    assert nonce == 7
+
+
+def test_decode_keeps_bytes4_return_equal_to_selector() -> None:
+    """A bytes4 return value equal to the selector must not be re-read as calldata."""
+    fn = ContractFunction.from_abi("function mySelector() view returns (bytes4)")
+    return_data = bytes(fn.selector) + b"\x00" * 28
+    assert fn.decode(return_data) == bytes(fn.selector)
+
+
+def test_decode_input_resolves_overloaded_function() -> None:
+    """decode_input picks the matching overload by selector, not just abis[0]."""
+    fn = Contract.from_abi(
+        [
+            "function transfer(address,uint256)",
+            "function transfer(address,uint256,bytes)",
+        ]
+    ).fns.transfer
+    assert len(fn.abis) == 2
+
+    assert tuple(fn.decode_input(fn(b"\xaa" * 20, 1000).data)) == (
+        "0x" + "aa" * 20,
+        1000,
+    )
+    assert tuple(fn.decode_input(fn(b"\xbb" * 20, 2000, b"\xde\xad").data)) == (
+        "0x" + "bb" * 20,
+        2000,
+        b"\xde\xad",
+    )
