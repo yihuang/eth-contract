@@ -159,23 +159,29 @@ class ContractFunction:
         return result[0] if len(result) == 1 else result
 
     def decode_input(self, data: bytes, codec: ABICodec | None = None) -> Any:
-        """Decode full calldata (selector + args) against :attr:`input_types`.
+        """Decode full calldata (selector + args) against the matching overload.
 
-        Raises :class:`ValueError` if the leading 4 bytes don't match
-        :attr:`selector`. Body-only payloads are rejected because a first
-        arg whose bytes equal the selector would be indistinguishable
-        from a full call.
+        The leading 4 bytes select which overload to decode against;
+        :class:`ValueError` is raised if no overload's selector matches.
+        Body-only payloads are rejected because a first arg whose bytes
+        equal the selector would be indistinguishable from a full call.
         """
         codec = codec or _abi_codec
         data = HexBytes(data)
-        if len(data) < 4 or bytes(data[:4]) != bytes(self.selector):
-            got = bytes(data[:4]).hex() if len(data) >= 4 else bytes(data).hex()
-            raise ValueError(
-                f"selector mismatch for {self.signature}: "
-                f"got 0x{got}, expected 0x{bytes(self.selector).hex()}"
-            )
-        result = codec.decode(self.input_types, bytes(data[4:]))
-        return result[0] if len(result) == 1 else result
+        leading = bytes(data[:4])
+        overloads = [
+            (function_signature_to_4byte_selector(abi_to_signature(abi)), abi)
+            for abi in self.abis
+        ]
+        for sel, abi in overloads:
+            if bytes(sel) == leading:
+                result = codec.decode(get_abi_input_types(abi), bytes(data[4:]))
+                return result[0] if len(result) == 1 else result
+        expected = ", ".join("0x" + bytes(s).hex() for s, _ in overloads)
+        raise ValueError(
+            f"selector mismatch for {self.signature}: "
+            f"got 0x{leading.hex()}, expected one of [{expected}]"
+        )
 
     async def transact(
         self, w3: AsyncWeb3, acct: BaseAccount | ChecksumAddress, **tx: Unpack[TxParams]

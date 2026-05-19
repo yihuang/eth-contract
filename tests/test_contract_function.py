@@ -4,7 +4,7 @@ from eth_abi.decoding import AddressDecoder
 from eth_abi.registry import registry as default_registry
 from eth_typing import ABIFunction
 
-from eth_contract.contract import ContractFunction
+from eth_contract.contract import Contract, ContractFunction
 
 
 class TestContractFunctionFromABI:
@@ -195,3 +195,21 @@ def test_decode_keeps_bytes4_return_equal_to_selector() -> None:
     fn = ContractFunction.from_abi("function mySelector() view returns (bytes4)")
     return_data = bytes(fn.selector) + b"\x00" * 28
     assert fn.decode(return_data) == bytes(fn.selector)
+
+
+def test_decode_input_resolves_overloaded_function() -> None:
+    """decode_input picks the matching overload by selector, not just abis[0]."""
+    fn = Contract.from_abi(
+        [
+            "function transfer(address,uint256)",
+            "function transfer(address,uint256,bytes)",
+        ]
+    ).fns.transfer
+    assert len(fn.abis) == 2
+
+    assert tuple(fn.decode_input(fn(b"\xaa" * 20, 1000).data)) == ("0x" + "aa" * 20, 1000)
+    assert tuple(fn.decode_input(fn(b"\xbb" * 20, 2000, b"\xde\xad").data)) == (
+        "0x" + "bb" * 20,
+        2000,
+        b"\xde\xad",
+    )
