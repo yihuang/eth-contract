@@ -153,8 +153,28 @@ class ContractFunction:
         return self.decode(return_data)
 
     def decode(self, data: bytes, codec: ABICodec | None = None) -> Any:
+        """Decode return data against :attr:`output_types`."""
         codec = codec or _abi_codec
         result = codec.decode(self.output_types, data)
+        return result[0] if len(result) == 1 else result
+
+    def decode_input(self, data: bytes, codec: ABICodec | None = None) -> Any:
+        """Decode full calldata (selector + args) against :attr:`input_types`.
+
+        Raises :class:`ValueError` if the leading 4 bytes don't match
+        :attr:`selector`. Body-only payloads are rejected because a first
+        arg whose bytes equal the selector would be indistinguishable
+        from a full call.
+        """
+        codec = codec or _abi_codec
+        data = HexBytes(data)
+        if len(data) < 4 or bytes(data[:4]) != bytes(self.selector):
+            got = bytes(data[:4]).hex() if len(data) >= 4 else bytes(data).hex()
+            raise ValueError(
+                f"selector mismatch for {self.signature}: "
+                f"got 0x{got}, expected 0x{bytes(self.selector).hex()}"
+            )
+        result = codec.decode(self.input_types, bytes(data[4:]))
         return result[0] if len(result) == 1 else result
 
     async def transact(
