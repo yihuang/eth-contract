@@ -207,7 +207,10 @@ def test_decode_input_resolves_overloaded_function() -> None:
     ).fns.transfer
     assert len(fn.abis) == 2
 
-    assert tuple(fn.decode_input(fn(b"\xaa" * 20, 1000).data)) == ("0x" + "aa" * 20, 1000)
+    assert tuple(fn.decode_input(fn(b"\xaa" * 20, 1000).data)) == (
+        "0x" + "aa" * 20,
+        1000,
+    )
     assert tuple(fn.decode_input(fn(b"\xbb" * 20, 2000, b"\xde\xad").data)) == (
         "0x" + "bb" * 20,
         2000,
