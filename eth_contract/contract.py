@@ -46,7 +46,7 @@ from .human import (
     parse_function_signature,
     process_multiline,
 )
-from .struct import abi_struct_from_component, registered_struct
+from .struct import abi_struct_from_component
 from .utils import send_transaction
 
 _abi_codec = ABICodec(default_registry)
@@ -64,8 +64,7 @@ def _name_value(component: Mapping[str, Any], value: Any) -> Any:
         return value
     if abi_type == "tuple":
         fields = [_name_value(c, v) for c, v in zip(components, value)]
-        # A caller's own ABIStruct subclass wins; otherwise synthesize one.
-        struct = registered_struct(component) or abi_struct_from_component(component)
+        struct = abi_struct_from_component(component)
         return struct(*fields) if struct is not None else tuple(fields)
     # Array of tuples: strip one array dimension and recurse per element.
     inner = {**component, "type": abi_type.rsplit("[", 1)[0]}

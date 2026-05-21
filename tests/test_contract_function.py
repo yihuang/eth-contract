@@ -7,6 +7,7 @@ from eth_typing import ABIFunction
 
 from eth_contract import ABIStruct
 from eth_contract.contract import Contract, ContractFunction
+from eth_contract.human import parse_abi
 
 
 class TestContractFunctionFromABI:
@@ -199,6 +200,17 @@ def test_decode_keeps_bytes4_return_equal_to_selector() -> None:
     assert fn.decode(return_data) == bytes(fn.selector)
 
 
+POINT = "struct Point { uint256 x; uint256 y; }"
+
+
+def _fn(*signatures: str) -> ContractFunction:
+    """The function declared by the last signature; any earlier ones are the
+    struct definitions it references."""
+    abi = parse_abi(list(signatures))[-1]
+    assert abi["type"] == "function"
+    return ContractFunction.from_abi(abi)
+
+
 class TestDecodeNamedStructs:
     """``ContractFunction.decode`` maps ``tuple`` outputs to ``ABIStruct``
     instances. These cover the decode path itself; the deeper ``ABIStruct``
@@ -206,12 +218,7 @@ class TestDecodeNamedStructs:
 
     def test_decode_returns_abistruct(self) -> None:
         """A struct output decodes to a named, tuple-compatible ``ABIStruct``."""
-        fn = Contract.from_abi(
-            [
-                "struct Point { uint256 x; uint256 y; }",
-                "function getPoint() view returns (Point)",
-            ]
-        ).fns.getPoint
+        fn = _fn(POINT, "function getPoint() view returns (Point)")
         result = fn.decode(encode(fn.output_types, [(1, 2)]))
 
         assert issubclass(type(result), ABIStruct)
@@ -220,29 +227,17 @@ class TestDecodeNamedStructs:
 
     def test_decode_wraps_struct_arrays(self) -> None:
         """``decode`` wraps struct elements inside (possibly nested) arrays."""
-        points = Contract.from_abi(
-            [
-                "struct Point { uint256 x; uint256 y; }",
-                "function getPoints() view returns (Point[])",
-            ]
-        ).fns.getPoints
+        points = _fn(POINT, "function getPoints() view returns (Point[])")
         flat = points.decode(encode(points.output_types, [[(1, 2), (3, 4)]]))
         assert [(p.x, p.y) for p in flat] == [(1, 2), (3, 4)]
 
-        grid = Contract.from_abi(
-            [
-                "struct Point { uint256 x; uint256 y; }",
-                "function getGrid() view returns (Point[][])",
-            ]
-        ).fns.getGrid
+        grid = _fn(POINT, "function getGrid() view returns (Point[][])")
         rows = grid.decode(encode(grid.output_types, [[[(1, 2)], [(3, 4)]]]))
         assert [[(p.x, p.y) for p in row] for row in rows] == [[(1, 2)], [(3, 4)]]
 
     def test_decode_multi_return_stays_plain_tuple(self) -> None:
         """Multiple top-level return values are left as a plain tuple."""
-        fn = ContractFunction.from_abi(
-            "function pair() view returns (uint256 a, uint256 b)"
-        )
+        fn = _fn("function pair() view returns (uint256 a, uint256 b)")
         result = fn.decode(encode(fn.output_types, [7, 8]))
 
         assert result == (7, 8)

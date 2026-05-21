@@ -1,7 +1,6 @@
 from typing import Annotated, Any
 
 import pytest
-from eth_abi import encode
 
 from eth_contract import ABIStruct
 from eth_contract.contract import Contract
@@ -817,61 +816,3 @@ class TestDynamicStruct:
 
         assert restored == original
         assert type(restored.rows[0][0]) is tuple  # flat: not an ABIStruct
-
-
-def _decode_via_contract(struct_cls: type[ABIStruct], value: Any) -> Any:
-    """Decode *value* through a contract function declared to return
-    *struct_cls* -- the path that consults the user-class registry."""
-    fn = Contract.from_abi(
-        struct_cls.human_readable_abi()
-        + [f"function f() view returns ({struct_cls.__name__})"]
-    ).fns.f
-    return fn.decode(encode(fn.output_types, [value]))
-
-
-class TestStructRegistry:
-    """``decode`` returns a caller's own ``ABIStruct`` subclass when one with
-    a matching name and shape is defined."""
-
-    def test_decode_returns_registered_struct(self):
-        """A decoded struct output is an instance of the caller's class."""
-
-        class Registered(ABIStruct):
-            x: Annotated[int, "uint256"]
-            y: Annotated[int, "uint256"]
-
-        result = _decode_via_contract(Registered, (1, 2))
-
-        assert isinstance(result, Registered)
-        assert (result.x, result.y) == (1, 2)
-
-    def test_decode_returns_registered_nested_structs(self):
-        """Registered subclasses are used at every nesting level."""
-
-        class RegInner(ABIStruct):
-            v: Annotated[int, "uint256"]
-
-        class RegOuter(ABIStruct):
-            inner: RegInner
-            n: Annotated[int, "uint256"]
-
-        result = _decode_via_contract(RegOuter, ((5,), 9))
-
-        assert isinstance(result, RegOuter)
-        assert isinstance(result.inner, RegInner)
-        assert (result.inner.v, result.n) == (5, 9)
-
-    def test_redefining_struct_updates_registry(self):
-        """A redefined struct (REPL / notebook re-run) keeps decode stable:
-        the latest definition wins, rather than poisoning the registry."""
-
-        class Reload(ABIStruct):
-            x: Annotated[int, "uint256"]
-            y: Annotated[int, "uint256"]
-
-        class Reload(ABIStruct):  # noqa: F811 -- re-run cell, same name+shape
-            x: Annotated[int, "uint256"]
-            y: Annotated[int, "uint256"]
-
-        result = _decode_via_contract(Reload, (1, 2))
-        assert isinstance(result, Reload)  # the latest Reload, not poisoned
