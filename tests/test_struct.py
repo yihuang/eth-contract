@@ -1,9 +1,11 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 import pytest
 
 from eth_contract import ABIStruct
 from eth_contract.contract import Contract
+from eth_contract.human import parse_abi
+from eth_contract.struct import abi_struct_from_component
 
 
 class Inner(ABIStruct):
@@ -720,3 +722,97 @@ class TestNestedStructInContainer:
         comp = ContainerStruct._abi_components()
         fixed_comp = next(c for c in comp if c["name"] == "fixed_items")
         assert _component_type_str(fixed_comp) == "(uint256,uint128)[2]"
+
+
+POINT = "struct Point { uint256 x; uint256 y; }"
+
+
+def _struct_type(return_type: str, *struct_defs: str) -> Any:
+    """Synthesize the ``ABIStruct`` for a function returning ``return_type``,
+    given any ``struct`` definitions it references. ``None`` when the return
+    component can't be mapped to an ``ABIStruct``."""
+    sigs = [*struct_defs, f"function f() view returns ({return_type})"]
+    fn_abi = parse_abi(sigs)[-1]
+    assert fn_abi["type"] == "function"
+    return abi_struct_from_component(fn_abi["outputs"][0])
+
+
+class TestDynamicStruct:
+    """``abi_struct_from_component`` synthesizes an ``ABIStruct`` subclass from
+    a decoded ABI ``tuple`` component -- exercised here directly, without
+    ``ContractFunction``."""
+
+    def test_synthesizes_named_struct(self):
+        """A struct component maps to an ``ABIStruct`` with fields by name."""
+        p = _struct_type("Point", POINT)(1, 2)
+
+        assert isinstance(p, ABIStruct)
+        assert (p.x, p.y) == (1, 2)  # by name
+        assert (p[0], p[1]) == (1, 2)  # by index
+        assert p == (1, 2)  # equal to a plain tuple
+        assert type(p).__name__ == "Point"  # name from internalType
+
+    def test_encode_decode_round_trip(self):
+        """A synthesized struct is encode/decode-closed against itself."""
+        Point = _struct_type("Point", POINT)
+        original = Point(7, 8)
+        assert Point.decode(original.encode()) == original
+
+    def test_nested_decode_is_closed(self):
+        """Class-level ``decode`` rebuilds a nested struct as an ``ABIStruct``."""
+        Outer = _struct_type(
+            "Outer",
+            "struct Inner { uint256 v; }",
+            "struct Outer { Inner inner; uint256 n; }",
+        )
+        original = Outer((5,), 9)
+        restored = Outer.decode(original.encode())
+
+        assert restored == original
+        assert isinstance(restored.inner, ABIStruct)
+        assert (restored.inner.v, restored.n) == (5, 9)
+
+    def test_nested_struct_array_decode_is_closed(self):
+        """Class-level ``decode`` rebuilds nested struct arrays element-wise,
+        for both dynamic (``Point[]``) and fixed-size (``Point[3]``) arrays."""
+        Path = _struct_type("Path", POINT, "struct Path { Point[] pts; }")
+        Tri = _struct_type("Tri", POINT, "struct Tri { Point[3] pts; }")
+        path = Path(((1, 2), (3, 4)))
+        tri = Tri(((1, 1), (2, 2), (3, 3)))
+
+        for original in (path, tri):
+            restored = type(original).decode(original.encode())
+            assert restored == original
+            assert all(isinstance(p, ABIStruct) for p in restored.pts)
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ("(uint256, uint256)",),
+            ("S", "struct S { uint256 _x; uint256 y; }"),
+            ("(uint256 class, uint256 y)",),
+            ("(uint256 x, uint256 x)",),
+        ],
+        ids=["unnamed", "leading-underscore", "keyword", "duplicate"],
+    )
+    def test_unusable_field_names_are_unmapped(self, args):
+        """A tuple whose field names can't all be ``namedtuple`` fields maps to
+        ``None``, so callers fall back to a plain tuple."""
+        assert _struct_type(*args) is None
+
+    def test_same_shape_is_synthesized_once(self):
+        """Identical struct shapes resolve to the same cached class."""
+        first = _struct_type("Point", POINT)
+        second = _struct_type("Point", POINT)
+        assert first is second
+
+    def test_multidim_struct_array_field_stays_flat(self):
+        """A multi-dimensional struct array can't be an ``ABIStruct`` field, so
+        it degrades to a flat field: the struct still synthesizes and
+        round-trips, but that field's elements decode as plain tuples."""
+        Grid = _struct_type("Grid", POINT, "struct Grid { Point[][] rows; }")
+        original = Grid((((1, 2),), ((3, 4), (5, 6))))
+        restored = Grid.decode(original.encode())
+
+        assert restored == original
+        assert type(restored.rows[0][0]) is tuple  # flat: not an ABIStruct

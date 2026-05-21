@@ -1,6 +1,9 @@
 import collections
+import keyword
 import typing
-from typing import Any, get_args, get_origin, get_type_hints
+from functools import lru_cache
+from types import GenericAlias
+from typing import Any, Mapping, get_args, get_origin, get_type_hints
 
 from eth_abi import decode as abi_decode
 from eth_abi import encode as abi_encode
@@ -150,7 +153,7 @@ def _get_inner_struct_info(
     return (None, "")
 
 
-def _component_type_str(component: dict) -> str:
+def _component_type_str(component: Mapping[str, Any]) -> str:
     """Return the ABI type string for a single ABI component dict."""
     if "components" in component:
         inner = ",".join(_component_type_str(c) for c in component["components"])
@@ -505,3 +508,83 @@ class ABIStruct(metaclass=ABIStructMeta):
         can be passed directly to ``parse_abi`` or similar tools.
         """
         return cls._human_readable_abi_cache  # type: ignore[attr-defined]
+
+
+def _struct_typename(component: Mapping[str, Any]) -> str:
+    """Type name for a decoded struct, taken from its ``internalType``
+    (``"struct Foo"`` -> ``Foo``), or ``"Result"`` if absent/unusable."""
+    internal = component.get("internalType") or ""
+    if internal.startswith("struct "):
+        name = internal[len("struct ") :].split("[", 1)[0].rsplit(".", 1)[-1]
+        if name.isidentifier() and not keyword.iskeyword(name):
+            return name
+    return "Result"
+
+
+def _usable_field_names(names: "list[str]") -> bool:
+    """True when *names* can all serve as ``namedtuple`` fields."""
+    return bool(names) and len(set(names)) == len(names) and all(
+        n.isidentifier() and not n.startswith("_") and not keyword.iskeyword(n)
+        for n in names
+    )
+
+
+def _struct_spec(component: Mapping[str, Any]) -> "tuple | None":
+    """Recursive, hashable build-spec for a ``tuple`` *component*, or ``None``
+    when its field names can't be ``namedtuple`` fields."""
+    sub = component.get("components") or []
+    names = [c.get("name") or "" for c in sub]
+    if not _usable_field_names(names):
+        return None
+    fields = tuple((n, _field_spec(c)) for n, c in zip(names, sub))
+    return (_struct_typename(component), fields)
+
+
+def _field_spec(component: Mapping[str, Any]) -> tuple:
+    """Build-spec for one struct field: a ``"struct"`` descriptor for a nested
+    struct (rebuilt as an ``ABIStruct``), or a flat ``"value"`` descriptor for
+    anything an ``ABIStruct`` field can't represent."""
+    if component.get("components"):
+        suffix = component["type"][len("tuple") :]  # "", "[]", "[3]", "[][]"
+        child = _struct_spec(component)
+        if child is not None:
+            if suffix == "":
+                return ("struct", child)
+            if suffix == "[]":
+                return ("struct[]", child)
+            if suffix[1:-1].isdigit():  # single fixed dimension "[N]"
+                return ("struct[N]", child, suffix)
+    return ("value", _component_type_str(component))
+
+
+def _annotated(tp: Any, meta: str) -> Any:
+    """``typing.Annotated[tp, meta]`` built from a runtime type *tp*."""
+    return typing.Annotated[tp, meta]
+
+
+@lru_cache(maxsize=1024)
+def _struct_from_spec(spec: tuple) -> type:
+    """Build and cache the ``ABIStruct`` subclass described by *spec*."""
+    typename, fields = spec
+    annotations: "dict[str, Any]" = {}
+    for name, desc in fields:
+        if desc[0] == "value":
+            annotations[name] = typing.Annotated[Any, desc[1]]
+        elif desc[0] == "struct":
+            annotations[name] = _struct_from_spec(desc[1])
+        elif desc[0] == "struct[]":
+            annotations[name] = GenericAlias(list, _struct_from_spec(desc[1]))
+        else:  # "struct[N]"
+            inner = _struct_from_spec(desc[1])
+            annotations[name] = _annotated(
+                GenericAlias(list, inner), f"{inner.__name__}{desc[2]}"
+            )
+    return ABIStructMeta(typename, (ABIStruct,), {"__annotations__": annotations})
+
+
+def abi_struct_from_component(component: Mapping[str, Any]) -> "type | None":
+    """Map a decoded ABI ``tuple`` *component* to an ``ABIStruct`` subclass, so
+    decoded values expose their fields by name. ``None`` when the field names
+    can't be ``namedtuple`` fields (callers then fall back to a plain tuple)."""
+    spec = _struct_spec(component)
+    return None if spec is None else _struct_from_spec(spec)

@@ -5,6 +5,7 @@ from eth_abi.decoding import AddressDecoder
 from eth_abi.registry import registry as default_registry
 from eth_typing import ABIFunction
 
+from eth_contract import ABIStruct
 from eth_contract.contract import Contract, ContractFunction
 
 
@@ -199,10 +200,12 @@ def test_decode_keeps_bytes4_return_equal_to_selector() -> None:
 
 
 class TestDecodeNamedStructs:
-    """``decode`` returns ``tuple`` outputs as namedtuples so struct fields
-    can be read by name, while staying index- and tuple-compatible."""
+    """``ContractFunction.decode`` maps ``tuple`` outputs to ``ABIStruct``
+    instances. These cover the decode path itself; the deeper ``ABIStruct``
+    synthesis invariants are in ``test_struct.py``'s ``TestDynamicStruct``."""
 
-    def test_struct_return_is_named(self) -> None:
+    def test_decode_returns_abistruct(self) -> None:
+        """A struct output decodes to a named, tuple-compatible ``ABIStruct``."""
         fn = Contract.from_abi(
             [
                 "struct Point { uint256 x; uint256 y; }",
@@ -211,50 +214,31 @@ class TestDecodeNamedStructs:
         ).fns.getPoint
         result = fn.decode(encode(fn.output_types, [(1, 2)]))
 
+        assert issubclass(type(result), ABIStruct)
         assert (result.x, result.y) == (1, 2)  # by name
-        assert (result[0], result[1]) == (1, 2)  # by index
         assert result == (1, 2)  # equal to a plain tuple
-        assert type(result).__name__ == "Point"  # name from internalType
 
-    def test_nested_struct_return_is_named(self) -> None:
-        fn = Contract.from_abi(
-            [
-                "struct Inner { uint256 v; }",
-                "struct Outer { Inner inner; uint256 n; }",
-                "function getOuter() view returns (Outer)",
-            ]
-        ).fns.getOuter
-        result = fn.decode(encode(fn.output_types, [((5,), 9)]))
-
-        assert result.inner.v == 5
-        assert result.n == 9
-
-    def test_struct_array_return_is_named(self) -> None:
-        fn = Contract.from_abi(
+    def test_decode_wraps_struct_arrays(self) -> None:
+        """``decode`` wraps struct elements inside (possibly nested) arrays."""
+        points = Contract.from_abi(
             [
                 "struct Point { uint256 x; uint256 y; }",
                 "function getPoints() view returns (Point[])",
             ]
         ).fns.getPoints
-        result = fn.decode(encode(fn.output_types, [[(1, 2), (3, 4)]]))
+        flat = points.decode(encode(points.output_types, [[(1, 2), (3, 4)]]))
+        assert [(p.x, p.y) for p in flat] == [(1, 2), (3, 4)]
 
-        assert [(p.x, p.y) for p in result] == [(1, 2), (3, 4)]
-
-    def test_nested_struct_array_return_is_named(self) -> None:
-        """Multi-dimensional arrays of structs are wrapped at every level."""
-        fn = Contract.from_abi(
+        grid = Contract.from_abi(
             [
                 "struct Point { uint256 x; uint256 y; }",
                 "function getGrid() view returns (Point[][])",
             ]
         ).fns.getGrid
-        grid = [[(1, 2), (3, 4)], [(5, 6)]]
-        result = fn.decode(encode(fn.output_types, [grid]))
+        rows = grid.decode(encode(grid.output_types, [[[(1, 2)], [(3, 4)]]]))
+        assert [[(p.x, p.y) for p in row] for row in rows] == [[(1, 2)], [(3, 4)]]
 
-        assert [[(p.x, p.y) for p in row] for row in result] == grid
-        assert type(result[0][0]).__name__ == "Point"
-
-    def test_flat_multi_return_stays_plain_tuple(self) -> None:
+    def test_decode_multi_return_stays_plain_tuple(self) -> None:
         """Multiple top-level return values are left as a plain tuple."""
         fn = ContractFunction.from_abi(
             "function pair() view returns (uint256 a, uint256 b)"
@@ -262,50 +246,6 @@ class TestDecodeNamedStructs:
         result = fn.decode(encode(fn.output_types, [7, 8]))
 
         assert result == (7, 8)
-        assert type(result) is tuple
-
-    def test_unnamed_struct_components_fall_back_to_tuple(self) -> None:
-        """A tuple whose components have no names decodes to a plain tuple."""
-        fn = ContractFunction.from_abi(
-            "function anon() view returns ((uint256, uint256))"
-        )
-        result = fn.decode(encode(fn.output_types, [(1, 2)]))
-
-        assert result == (1, 2)
-        assert type(result) is tuple
-
-    def test_leading_underscore_field_falls_back_to_tuple(self) -> None:
-        """Solidity allows ``_x``; namedtuple forbids leading underscores,
-        so such structs decode to a plain tuple rather than crashing."""
-        fn = Contract.from_abi(
-            [
-                "struct S { uint256 _x; uint256 y; }",
-                "function getS() view returns (S)",
-            ]
-        ).fns.getS
-        result = fn.decode(encode(fn.output_types, [(1, 2)]))
-
-        assert result == (1, 2)
-        assert type(result) is tuple
-
-    def test_keyword_field_falls_back_to_tuple(self) -> None:
-        """A component named like a Python keyword decodes to a plain tuple."""
-        fn = ContractFunction.from_abi(
-            "function f() view returns ((uint256 class, uint256 y))"
-        )
-        result = fn.decode(encode(fn.output_types, [(1, 2)]))
-
-        assert result == (1, 2)
-        assert type(result) is tuple
-
-    def test_duplicate_field_names_fall_back_to_tuple(self) -> None:
-        """Repeated component names decode to a plain tuple."""
-        fn = ContractFunction.from_abi(
-            "function g() view returns ((uint256 x, uint256 x))"
-        )
-        result = fn.decode(encode(fn.output_types, [(1, 2)]))
-
-        assert result == (1, 2)
         assert type(result) is tuple
 
 

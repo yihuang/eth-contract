@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import keyword
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from copy import copy
 from dataclasses import dataclass, field
-from functools import lru_cache
 from typing import Any, Mapping, Sequence, cast
 
 from eth_abi.codec import ABICodec
@@ -48,51 +46,16 @@ from .human import (
     parse_function_signature,
     process_multiline,
 )
+from .struct import abi_struct_from_component
 from .utils import send_transaction
 
 _abi_codec = ABICodec(default_registry)
 
 
-@lru_cache(maxsize=1024)
-def _result_namedtuple(typename: str, names: tuple[str, ...]) -> type:
-    """Cache one namedtuple class per (typename, field-names) combination."""
-    return namedtuple(typename, names)
-
-
-def _struct_typename(component: Mapping[str, Any]) -> str:
-    """namedtuple type name from a tuple's ``internalType``
-    (``"struct Foo"`` -> ``Foo``), or ``"Result"`` if absent/unusable."""
-    internal = component.get("internalType") or ""
-    if internal.startswith("struct "):
-        name = internal[len("struct ") :].split("[", 1)[0].rsplit(".", 1)[-1]
-        if name.isidentifier() and not keyword.iskeyword(name):
-            return name
-    return "Result"
-
-
-def _name_tuple(
-    typename: str, components: Sequence[Mapping[str, Any]], values: Sequence
-) -> Any:
-    """Wrap decoded *values* in a namedtuple named by *components*, or a
-    plain tuple if any name is not a usable namedtuple field (missing,
-    duplicate, leading underscore, keyword or non-identifier)."""
-    fields = tuple(_name_value(c, v) for c, v in zip(components, values))
-    names = tuple(c.get("name") or "" for c in components)
-    if (
-        names
-        and len(set(names)) == len(names)
-        and all(
-            n.isidentifier() and not n.startswith("_") and not keyword.iskeyword(n)
-            for n in names
-        )
-    ):
-        return _result_namedtuple(typename, names)(*fields)
-    return fields
-
-
 def _name_value(component: Mapping[str, Any], value: Any) -> Any:
-    """Recursively wrap a decoded *value*: tuples (and nested arrays of
-    them) become namedtuples; anything else is returned unchanged."""
+    """Recursively wrap a decoded *value*: ``tuple`` values (and nested
+    arrays of them) become ``ABIStruct`` instances so their fields are
+    reachable by name; anything else is returned unchanged."""
     abi_type = component["type"]
     if not abi_type.startswith("tuple"):
         return value
@@ -100,7 +63,9 @@ def _name_value(component: Mapping[str, Any], value: Any) -> Any:
     if not components:
         return value
     if abi_type == "tuple":
-        return _name_tuple(_struct_typename(component), components, value)
+        fields = [_name_value(c, v) for c, v in zip(components, value)]
+        struct = abi_struct_from_component(component)
+        return struct(*fields) if struct is not None else tuple(fields)
     # Array of tuples: strip one array dimension and recurse per element.
     inner = {**component, "type": abi_type.rsplit("[", 1)[0]}
     return tuple(_name_value(inner, item) for item in value)
@@ -210,7 +175,8 @@ class ContractFunction:
     def decode(self, data: bytes, codec: ABICodec | None = None) -> Any:
         """Decode return data against :attr:`output_types`.
 
-        Struct/tuple outputs become namedtuples, readable by name or index.
+        Struct/tuple outputs become ``ABIStruct`` instances, readable by
+        field name or index.
         """
         codec = codec or _abi_codec
         outputs = self.abi.get("outputs") or []
