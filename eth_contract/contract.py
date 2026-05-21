@@ -46,7 +46,7 @@ from .human import (
     parse_function_signature,
     process_multiline,
 )
-from .struct import abi_struct_from_component
+from .struct import abi_struct_from_component, registered_struct
 from .utils import send_transaction
 
 _abi_codec = ABICodec(default_registry)
@@ -64,7 +64,8 @@ def _name_value(component: Mapping[str, Any], value: Any) -> Any:
         return value
     if abi_type == "tuple":
         fields = [_name_value(c, v) for c, v in zip(components, value)]
-        struct = abi_struct_from_component(component)
+        # A caller's own ABIStruct subclass wins; otherwise synthesize one.
+        struct = registered_struct(component) or abi_struct_from_component(component)
         return struct(*fields) if struct is not None else tuple(fields)
     # Array of tuples: strip one array dimension and recurse per element.
     inner = {**component, "type": abi_type.rsplit("[", 1)[0]}
@@ -181,7 +182,8 @@ class ContractFunction:
         codec = codec or _abi_codec
         outputs = self.abi.get("outputs") or []
         result = codec.decode(self.output_types, data)
-        result = tuple(_name_value(o, v) for o, v in zip(outputs, result))
+        if any(o["type"].startswith("tuple") for o in outputs):
+            result = tuple(_name_value(o, v) for o, v in zip(outputs, result))
         return result[0] if len(result) == 1 else result
 
     def decode_input(self, data: bytes, codec: ABICodec | None = None) -> Any:

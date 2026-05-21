@@ -308,6 +308,11 @@ def _collect_hra(cls: Any, seen: "dict[str, str]") -> None:
         seen[cls.__name__] = f"struct {cls.__name__} {{ {properties}; }}"
 
 
+# Maps (struct name, ABI type string) -> a user-defined ABIStruct subclass,
+# so ``decode`` can return a caller's own class instead of a synthesized one.
+_STRUCT_REGISTRY: "dict[tuple[str, str], type]" = {}
+
+
 class ABIStructMeta(type):
     """
     Metaclass for ABIStruct.  When a user defines a subclass of ABIStruct
@@ -405,6 +410,10 @@ class ABIStructMeta(type):
         seen: "dict[str, str]" = {}
         _collect_hra(cls, seen)
         cls._human_readable_abi_cache = list(seen.values())
+        # Register user-defined structs so decode can return the caller's
+        # class; a later same-name+shape definition replaces this one.
+        if not namespace.get("_abi_synthesized"):
+            _STRUCT_REGISTRY[(cls.__name__, cls._abi_type_str_cache)] = cls
 
 
 class ABIStruct(metaclass=ABIStructMeta):
@@ -557,11 +566,6 @@ def _field_spec(component: Mapping[str, Any]) -> tuple:
     return ("value", _component_type_str(component))
 
 
-def _annotated(tp: Any, meta: str) -> Any:
-    """``typing.Annotated[tp, meta]`` built from a runtime type *tp*."""
-    return typing.Annotated[tp, meta]
-
-
 @lru_cache(maxsize=1024)
 def _struct_from_spec(spec: tuple) -> type:
     """Build and cache the ``ABIStruct`` subclass described by *spec*."""
@@ -576,10 +580,12 @@ def _struct_from_spec(spec: tuple) -> type:
             annotations[name] = GenericAlias(list, _struct_from_spec(desc[1]))
         else:  # "struct[N]"
             inner = _struct_from_spec(desc[1])
-            annotations[name] = _annotated(
+            annotations[name] = typing.Annotated[
                 GenericAlias(list, inner), f"{inner.__name__}{desc[2]}"
-            )
-    return ABIStructMeta(typename, (ABIStruct,), {"__annotations__": annotations})
+            ]
+    # _abi_synthesized keeps these out of the user-class registry.
+    namespace = {"__annotations__": annotations, "_abi_synthesized": True}
+    return ABIStructMeta(typename, (ABIStruct,), namespace)
 
 
 def abi_struct_from_component(component: Mapping[str, Any]) -> "type | None":
@@ -588,3 +594,10 @@ def abi_struct_from_component(component: Mapping[str, Any]) -> "type | None":
     can't be ``namedtuple`` fields (callers then fall back to a plain tuple)."""
     spec = _struct_spec(component)
     return None if spec is None else _struct_from_spec(spec)
+
+
+def registered_struct(component: Mapping[str, Any]) -> "type | None":
+    """The user-defined ``ABIStruct`` registered for *component*'s name and
+    ABI shape, or ``None`` when none matches."""
+    key = (_struct_typename(component), _component_type_str(component))
+    return _STRUCT_REGISTRY.get(key)
