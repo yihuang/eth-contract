@@ -53,7 +53,7 @@ from .utils import send_transaction
 _abi_codec = ABICodec(default_registry)
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=1024)
 def _result_namedtuple(typename: str, names: tuple[str, ...]) -> type:
     """Cache one namedtuple class per (typename, field-names) combination."""
     return namedtuple(typename, names)
