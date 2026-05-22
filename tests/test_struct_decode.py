@@ -43,6 +43,11 @@ class Item(ABIStruct):
     name: Annotated[str, "string"]
 
 
+class Values(ABIStruct):
+    constructorAmount: Annotated[int, "uint256"]
+    initCallAmount: Annotated[int, "uint256"]
+
+
 # ---------------------------------------------------------------------------
 # from_abi integration
 # ---------------------------------------------------------------------------
@@ -552,3 +557,31 @@ class TestErrors:
 
         assert type(out) is tuple and type(inp) is tuple  # neither converted
         assert (out, inp) == ((1, 2), (3, 4))
+
+
+def _namespaced_fn(return_type: str) -> ContractFunction:
+    fn = Contract.from_abi(
+        [f"function get() returns ({return_type})"], structs=[Values]
+    ).fns.get
+    fn.abi["outputs"][0]["internalType"] = f"struct CreateX.{return_type}"
+    return fn
+
+
+class TestNamespacedInternalType:
+
+    def test_qualified_struct(self):
+        fn = _namespaced_fn("Values")
+        raw = abi_encode(["(uint256,uint256)"], [(1, 2)])
+        result = fn.decode(raw)
+        assert isinstance(result, Values)
+        assert result == Values(constructorAmount=1, initCallAmount=2)
+
+    def test_qualified_struct_array(self):
+        fn = _namespaced_fn("Values[]")
+        raw = abi_encode(["(uint256,uint256)[]"], [[(1, 2), (3, 4)]])
+        result = fn.decode(raw)
+        assert all(isinstance(v, Values) for v in result)
+        assert result == (
+            Values(constructorAmount=1, initCallAmount=2),
+            Values(constructorAmount=3, initCallAmount=4),
+        )

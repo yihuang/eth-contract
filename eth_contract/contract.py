@@ -115,7 +115,9 @@ def _decode_abi_structs(
         internal_type: str | None = abi_type.get("internalType")  # type: ignore
         if internal_type is not None and internal_type.startswith("struct "):
             raw_name = internal_type[len("struct ") :]
-            cls = structs.get(raw_name)
+            # solc qualifies library/contract structs ("struct CreateX.Values");
+            # try the full name, then fall back to the bare struct name.
+            cls = structs.get(raw_name) or structs.get(raw_name.rsplit(".", 1)[-1])
             if cls is not None:
                 return _build_instance(cls, val)
             return val
