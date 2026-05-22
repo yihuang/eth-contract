@@ -569,14 +569,16 @@ class Contract:
         """
         return Contract(self.abi, structs=self.structs, tx=merge(self.tx, tx))
 
-    def with_structs(self, structs: list[type[ABIStruct]]) -> Contract:
+    def with_structs(
+        self, structs: list[type[ABIStruct]] | dict[str, type[ABIStruct]]
+    ) -> Contract:
         """
         Return a new Contract with the given ABIStruct subclasses merged in.
 
         The struct definitions are auto-injected and decode results
         are automatically converted to ABIStruct instances.
         """
-        structs_map = {s.__name__: s for s in structs}
+        structs_map = _normalize_structs(structs)
         return Contract(self.abi, structs={**self.structs, **structs_map}, tx=self.tx)
 
     @classmethod
