@@ -88,7 +88,7 @@ def _decode_abi_structs(
             cls = structs.get(base_name)
             if cls is not None:
                 if is_array:
-                    return [_build_instance(cls, item) for item in val]
+                    return tuple(_build_instance(cls, item) for item in val)
                 return _build_instance(cls, val)
             return val
 
