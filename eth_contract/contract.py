@@ -74,7 +74,7 @@ def _decode_abi_structs(
     from *structs*, then calls ``_build_instance`` to construct it.
 
     Structs referenced in the ABI but missing from *structs* are
-    silently left as plain tuples.
+    silently left as plain tuples or lists.
     """
 
     def _process(val: Any, abi_type: ABIComponent) -> Any:
@@ -135,6 +135,23 @@ class ContractFunction:
         i: ABIFunction | str,
         structs: list[type[ABIStruct]] | None = None,
     ) -> ContractFunction:
+        """
+        Create a ContractFunction from an ABI or human-readable signature.
+
+        Args:
+            i: An ABIFunction dict or a human-readable function signature.
+            structs: Optional list of ABIStruct subclasses referenced by the
+                signature.  Their definitions are auto-injected so that
+                ``decode()`` returns ABIStruct instances.
+
+        Example::
+
+            fn = ContractFunction.from_abi(
+                "function getPoint() returns (Point)",
+                structs=[Point],
+            )
+            fn.decode(data)  #  Point(x=1, y=2)
+        """
         struct_map: dict[str, type[ABIStruct]] = {}
         if isinstance(i, str):
             if structs:
@@ -212,6 +229,16 @@ class ContractFunction:
     ) -> Any:
         """
         Call the function on the contract at the given address.
+
+        Args:
+            w3: An async Web3 instance.
+            block_identifier: Block at which to call.
+            state_override: State override map.
+            ccip_read_enabled: Whether CCIP read is enabled.
+            structs: Optional list of ABIStruct subclasses.  When provided,
+                decoded return values will be converted to ABIStruct instances
+                instead of plain tuples.
+            **tx: Transaction parameters (to, gas, etc.).
         """
         if self.parent is not None:
             tx = merge(self.parent.tx, tx)
@@ -229,7 +256,18 @@ class ContractFunction:
         codec: ABICodec | None = None,
         structs: list[type[ABIStruct]] | None = None,
     ) -> Any:
-        """Decode return data against :attr:`output_types`."""
+        """Decode return data against :attr:`output_types`.
+
+        Args:
+            data: The raw return data bytes.
+            codec: Optional custom ABICodec.
+            structs: Optional list of ABIStruct subclasses.  When provided,
+                decoded tuples are converted to ABIStruct instances.
+
+        Returns:
+            The decoded value (plain tuple by default, or ABIStruct instance
+            when *structs* matches the ABI's ``internalType``).
+        """
         codec = codec or _abi_codec
         result = codec.decode(self.output_types, data)
         result = result[0] if len(result) == 1 else result
@@ -257,6 +295,12 @@ class ContractFunction:
         :class:`ValueError` is raised if no overload's selector matches.
         Body-only payloads are rejected because a first arg whose bytes
         equal the selector would be indistinguishable from a full call.
+
+        Args:
+            data: The calldata bytes (4-byte selector + encoded args).
+            codec: Optional custom ABICodec.
+            structs: Optional list of ABIStruct subclasses.  When provided,
+                decoded struct arguments are converted to ABIStruct instances.
         """
         codec = codec or _abi_codec
 
@@ -500,7 +544,10 @@ class Contract:
 
     def with_structs(self, structs: list[type[ABIStruct]]) -> Contract:
         """
-        Return a new Contract with the given struct mapping merged in.
+        Return a new Contract with the given ABIStruct subclasses merged in.
+
+        The struct definitions are auto-injected and decode results
+        are automatically converted to ABIStruct instances.
         """
         structs_map = {s.__name__: s for s in structs}
         return Contract(self.abi, structs={**self.structs, **structs_map}, tx=self.tx)

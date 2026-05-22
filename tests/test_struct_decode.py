@@ -118,10 +118,10 @@ class TestFromABI:
 
         raw = abi_encode(["(uint256,string)[]"], [((1, "a"), (2, "b"))])
         result = fn.decode(raw)
-        assert isinstance(result, list)
+        assert isinstance(result, tuple)
         assert len(result) == 2
         assert all(isinstance(i, Item) for i in result)
-        assert result == [Item(id=1, name="a"), Item(id=2, name="b")]
+        assert result == (Item(id=1, name="a"), Item(id=2, name="b"))
 
     def test_decode_input_with_structs(self):
         """decode_input returns ABIStruct for struct arguments."""
