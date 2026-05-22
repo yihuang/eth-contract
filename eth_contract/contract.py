@@ -207,7 +207,7 @@ class ContractFunction:
         block_identifier: BlockIdentifier | None = None,
         state_override: StateOverride | None = None,
         ccip_read_enabled: bool | None = None,
-        structs: dict[str, type[ABIStruct]] | None = None,
+        structs: list[type[ABIStruct]] | None = None,
         **tx: Unpack[TxParams],
     ) -> Any:
         """
@@ -227,18 +227,21 @@ class ContractFunction:
         self,
         data: bytes,
         codec: ABICodec | None = None,
-        structs: dict[str, type[ABIStruct]] | None = None,
+        structs: list[type[ABIStruct]] | None = None,
     ) -> Any:
         """Decode return data against :attr:`output_types`."""
         codec = codec or _abi_codec
         result = codec.decode(self.output_types, data)
         result = result[0] if len(result) == 1 else result
 
-        structs = structs or self.structs
-        if not structs and self.parent:
-            structs = self.parent.structs
-        if structs:
-            result = _decode_abi_structs(result, self.abi.get("outputs", []), structs)
+        structs_map = {s.__name__: s for s in (structs or [])}
+        structs_map = structs_map or self.structs
+        if not structs_map and self.parent:
+            structs_map = self.parent.structs
+        if structs_map:
+            result = _decode_abi_structs(
+                result, self.abi.get("outputs", []), structs_map
+            )
 
         return result
 
@@ -246,7 +249,7 @@ class ContractFunction:
         self,
         data: bytes,
         codec: ABICodec | None = None,
-        structs: dict[str, type[ABIStruct]] | None = None,
+        structs: list[type[ABIStruct]] | None = None,
     ) -> Any:
         """Decode full calldata (selector + args) against the matching overload.
 
@@ -257,9 +260,10 @@ class ContractFunction:
         """
         codec = codec or _abi_codec
 
-        structs = structs or self.structs
-        if not structs and self.parent:
-            structs = self.parent.structs
+        structs_map = {s.__name__: s for s in (structs or [])}
+        structs_map = structs_map or self.structs
+        if not structs_map and self.parent:
+            structs_map = self.parent.structs
 
         leading = data[:4]
         overloads = [
@@ -270,8 +274,10 @@ class ContractFunction:
             if sel == leading:
                 result = codec.decode(get_abi_input_types(abi), data[4:])
                 result = result[0] if len(result) == 1 else result
-                if structs:
-                    result = _decode_abi_structs(result, abi.get("inputs", []), structs)
+                if structs_map:
+                    result = _decode_abi_structs(
+                        result, abi.get("inputs", []), structs_map
+                    )
                 return result
         expected = ", ".join("0x" + s.hex() for s, _ in overloads)
         raise ValueError(
