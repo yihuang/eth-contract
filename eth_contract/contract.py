@@ -281,6 +281,14 @@ class ContractFunction:
         )
         return self.decode(return_data, structs=structs)
 
+    def _resolve_structs(
+        self, structs: list[type[ABIStruct]] | dict[str, type[ABIStruct]] | None
+    ) -> dict[str, type[ABIStruct]]:
+        """Struct map: explicit *structs* (``[]`` included) > self > parent."""
+        if structs is not None:
+            return _normalize_structs(structs)
+        return self.structs or (self.parent.structs if self.parent else {})
+
     def decode(
         self,
         data: bytes,
@@ -302,9 +310,7 @@ class ContractFunction:
         codec = codec or _abi_codec
         result = codec.decode(self.output_types, data)
 
-        structs_map = _normalize_structs(structs) or self.structs
-        if not structs_map and self.parent:
-            structs_map = self.parent.structs
+        structs_map = self._resolve_structs(structs)
         if structs_map:
             result = _decode_abi_structs(
                 result, self.abi.get("outputs", []), structs_map
@@ -333,9 +339,7 @@ class ContractFunction:
         """
         codec = codec or _abi_codec
 
-        structs_map = _normalize_structs(structs) or self.structs
-        if not structs_map and self.parent:
-            structs_map = self.parent.structs
+        structs_map = self._resolve_structs(structs)
 
         leading = data[:4]
         overloads = [

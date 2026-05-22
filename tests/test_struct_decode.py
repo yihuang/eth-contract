@@ -540,3 +540,15 @@ class TestErrors:
         calldata = fn(point).data
         result = fn.decode_input(calldata)  # uses parent's structs
         assert isinstance(result, Point)
+
+    def test_empty_structs_overrides_contract_structs(self):
+        contract = Contract.from_abi(
+            ["function getPoint() returns (Point)", "function setPoint(Point)"],
+            structs=[Point],
+        )
+        set_point = contract.fns.setPoint
+        out = contract.fns.getPoint.decode(Point(x=1, y=2).encode(), structs=[])
+        inp = set_point.decode_input(set_point(Point(x=3, y=4)).data, structs=[])
+
+        assert type(out) is tuple and type(inp) is tuple  # neither converted
+        assert (out, inp) == ((1, 2), (3, 4))
