@@ -12,7 +12,7 @@ API::
 
 from typing import Annotated
 
-import pytest
+from eth_abi import encode as abi_encode
 
 from eth_contract import ABIStruct
 from eth_contract.contract import Contract, ContractFunction
@@ -99,7 +99,6 @@ class TestFromABI:
             structs=[Point, Coord],
         )
         fn = contract.fns.getBoth
-        from eth_abi import encode as abi_encode
 
         raw = abi_encode(["(uint256,uint256)", "(int256,int256)"], [(1, 2), (10, 20)])
         result = fn.decode(raw)
@@ -114,7 +113,6 @@ class TestFromABI:
             structs=[Item],
         )
         fn = contract.fns.getItems
-        from eth_abi import encode as abi_encode
 
         raw = abi_encode(["(uint256,string)[]"], [((1, "a"), (2, "b"))])
         result = fn.decode(raw)
@@ -122,6 +120,125 @@ class TestFromABI:
         assert len(result) == 2
         assert all(isinstance(i, Item) for i in result)
         assert result == (Item(id=1, name="a"), Item(id=2, name="b"))
+
+    def test_multi_dimensional_struct_array(self):
+        """Struct[][] — multi-dimensional struct array."""
+        contract = Contract.from_abi(
+            [
+                "struct Point { uint256 x; uint256 y; }",
+                "function getMatrix() returns (Point[][])",
+            ],
+            structs=[Point],
+        )
+        fn = contract.fns.getMatrix
+        from eth_abi import encode as abi_encode
+
+        raw = abi_encode(
+            ["(uint256,uint256)[][]"],
+            [(((1, 2), (3, 4)), ((5, 6),))],
+        )
+        result = fn.decode(raw)
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        # Each outer element is an array of Points
+        inner = result[0]
+        assert isinstance(inner, tuple)
+        assert len(inner) == 2
+        assert isinstance(inner[0], Point)
+        assert inner[0] == Point(x=1, y=2)
+        assert isinstance(inner[1], Point)
+        assert inner[1] == Point(x=3, y=4)
+        # Second outer element
+        inner2 = result[1]
+        assert len(inner2) == 1
+        assert isinstance(inner2[0], Point)
+        assert inner2[0] == Point(x=5, y=6)
+
+    def test_multi_dimensional_fixed_struct_array(self):
+        """Struct[2][3] — multi-dimensional fixed-size struct array."""
+        contract = Contract.from_abi(
+            [
+                "struct Point { uint256 x; uint256 y; }",
+                "function getGrid() returns (Point[2][3])",
+            ],
+            structs=[Point],
+        )
+        fn = contract.fns.getGrid
+        from eth_abi import encode as abi_encode
+
+        raw = abi_encode(
+            ["(uint256,uint256)[2][3]"],
+            [(((1, 2), (3, 4)), ((5, 6), (7, 8)), ((9, 10), (11, 12)))],
+        )
+        result = fn.decode(raw)
+        # 3 outer rows, each with 2 Points
+        assert isinstance(result, tuple)
+        assert len(result) == 3
+        for row in result:
+            assert isinstance(row, tuple)
+            assert len(row) == 2
+            for pt in row:
+                assert isinstance(pt, Point)
+
+    def test_anonymous_tuple_array_with_nested_struct(self):
+        """Anonymous tuple[] where each element contains a struct."""
+        contract = Contract.from_abi(
+            [
+                "struct Point { uint256 x; uint256 y; }",
+                "function getPoints() returns ((Point,bool)[])",
+            ],
+            structs=[Point],
+        )
+        fn = contract.fns.getPoints
+
+        raw = abi_encode(
+            ["((uint256,uint256),bool)[]"],
+            [(((1, 2), True), ((3, 4), False))],
+        )
+        result = fn.decode(raw)
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        # Each element should be a (Point, bool) tuple
+        assert isinstance(result[0][0], Point)
+        assert result[0][0] == Point(x=1, y=2)
+        assert result[0][1] is True
+        assert isinstance(result[1][0], Point)
+        assert result[1][0] == Point(x=3, y=4)
+        assert result[1][1] is False
+
+    def test_multi_dimensional_anonymous_tuple_array(self):
+        """(Struct,bool)[][] — multi-dimensional anonymous tuple array."""
+        contract = Contract.from_abi(
+            [
+                "struct Point { uint256 x; uint256 y; }",
+                "function getMatrix() returns ((Point,bool)[][])",
+            ],
+            structs=[Point],
+        )
+        fn = contract.fns.getMatrix
+
+        raw = abi_encode(
+            ["((uint256,uint256),bool)[][]"],
+            [((((1, 2), True), ((3, 4), False)), (((5, 6), True),))],
+        )
+        result = fn.decode(raw)
+        # result[0] is the first outer array: ((1,2),True), ((3,4),False)
+        inner = result[0]
+        assert isinstance(inner, tuple)
+        assert len(inner) == 2
+        # Each inner element should be a (Point, bool) tuple
+        assert isinstance(inner[0][0], Point)
+        assert inner[0][0] == Point(x=1, y=2)
+        assert inner[0][1] is True
+        assert isinstance(inner[1][0], Point)
+        assert inner[1][0] == Point(x=3, y=4)
+        assert inner[1][1] is False
+        # result[1] is the second outer array: ((5,6),True)
+        inner2 = result[1]
+        assert len(inner2) == 1
+        assert isinstance(inner2[0][0], Point)
+        assert inner2[0][0] == Point(x=5, y=6)
+        assert inner2[0][1] is True
 
     def test_decode_input_with_structs(self):
         """decode_input returns ABIStruct for struct arguments."""
@@ -283,7 +400,9 @@ class TestFromABI:
 
 
 class TestManualDecodeKwarg:
-    """Pass structs directly to decode()/decode_input() without contract-level structs."""
+    """
+    Pass structs directly to decode()/decode_input() without contract-level structs.
+    """
 
     def test_decode_with_structs_kwarg(self):
         """decode(structs=[...]) works when called manually."""
@@ -340,7 +459,6 @@ class TestManualDecodeKwarg:
             + ["function getItemAndPoint() returns (Item, Point)"],
         )
         fn = contract.fns.getItemAndPoint
-        from eth_abi import encode as abi_encode
 
         raw = abi_encode(
             ["(uint256,string)", "(uint256,uint256)"], [(1, "a"), (10, 20)]

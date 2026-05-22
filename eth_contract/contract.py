@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import itertools
 from collections import defaultdict
 from copy import copy
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence, cast
+from typing import Any, Iterable, Mapping, Sequence, cast
 
 from eth_abi.codec import ABICodec
 from eth_abi.registry import registry as default_registry
@@ -12,7 +13,6 @@ from eth_typing import (
     ABI,
     ABIComponent,
     ABIConstructor,
-    ABIElement,
     ABIEvent,
     ABIFunction,
     ChecksumAddress,
@@ -61,6 +61,31 @@ from .utils import send_transaction
 _abi_codec = ABICodec(default_registry)
 
 
+def _split_array_suffix(type_str: str) -> tuple[str, bool]:
+    """Strip the outermost array suffix from *type_str*.
+
+    Returns ``(inner_type, is_array)`` where *inner_type* has one less
+    array dimension.
+
+    >>> _split_array_suffix("struct Test[][]")
+    ("struct Test[]", True)
+    >>> _split_array_suffix("tuple[]")
+    ("tuple", True)
+    >>> _split_array_suffix("tuple[3]")
+    ("tuple", True)
+    >>> _split_array_suffix("tuple[][]")
+    ("tuple[]", True)
+    >>> _split_array_suffix("tuple")
+    ("tuple", False)
+    """
+    if type_str.endswith("[]"):
+        return type_str[:-2], True
+    bracket = type_str.rfind("[")
+    if bracket >= 0:
+        return type_str[:bracket], True
+    return type_str, False
+
+
 def _decode_abi_structs(
     value: Any,
     abi_types: Sequence[ABIComponent],
@@ -78,33 +103,42 @@ def _decode_abi_structs(
     """
 
     def _process(val: Any, abi_type: ABIComponent) -> Any:
-        internal_type: str = abi_type.get("internalType", "")  # type: ignore
-        if internal_type and internal_type.startswith("struct "):
-            raw_name = internal_type[len("struct ") :]
-            parts = raw_name.split("[", 1)
-            base_name = parts[0]
-            is_array = len(parts) == 2
+        # 1. Array: strip one level, recurse on each element
+        inner_type, is_array = _split_array_suffix(abi_type["type"])
+        if is_array:
+            inner_abi: ABIComponent = dict(abi_type, type=inner_type)  # type: ignore
+            internal: str | None = abi_type.get("internalType")  # type: ignore
+            if internal is not None:
+                inner_internal, _ = _split_array_suffix(internal)
+                inner_abi["internalType"] = inner_internal  # type: ignore
+            return tuple(_process(item, inner_abi) for item in val)
 
-            cls = structs.get(base_name)
+        # 2. Named struct (no array suffix at this point)
+        internal_type: str | None = abi_type.get("internalType")  # type: ignore
+        if internal_type is not None and internal_type.startswith("struct "):
+            raw_name = internal_type[len("struct ") :]
+            cls = structs.get(raw_name)
             if cls is not None:
-                if is_array:
-                    return tuple(_build_instance(cls, item) for item in val)
                 return _build_instance(cls, val)
             return val
 
-        # Nested anonymous tuple
+        # 3. Anonymous tuple
         if "components" in abi_type:
             return tuple(_process(v, c) for v, c in zip(val, abi_type["components"]))
 
         return val
 
-    if not abi_types:
-        return value
+    return tuple(_process(v, t) for v, t in zip(value, abi_types))
 
-    if len(abi_types) == 1:
-        return _process(value, abi_types[0])
-    else:
-        return tuple(_process(v, t) for v, t in zip(value, abi_types))
+
+def _normalize_structs(
+    structs: list[type[ABIStruct]] | dict[str, type[ABIStruct]] | None,
+) -> dict[str, type[ABIStruct]]:
+    if structs is None:
+        return {}
+    if isinstance(structs, dict):
+        return structs
+    return {s.__name__: s for s in structs}
 
 
 @dataclass
@@ -133,7 +167,7 @@ class ContractFunction:
     def from_abi(
         cls,
         i: ABIFunction | str,
-        structs: list[type[ABIStruct]] | None = None,
+        structs: list[type[ABIStruct]] | dict[str, type[ABIStruct]] | None = None,
     ) -> ContractFunction:
         """
         Create a ContractFunction from an ABI or human-readable signature.
@@ -152,17 +186,16 @@ class ContractFunction:
             )
             fn.decode(data)  #  Point(x=1, y=2)
         """
-        struct_map: dict[str, type[ABIStruct]] = {}
+        struct_map = _normalize_structs(structs)
         if isinstance(i, str):
-            if structs:
-                struct_defs: list[str] = []
-                for s in structs:
-                    struct_defs.extend(s.human_readable_abi())
-                    struct_map[s.__name__] = s
-                parsed = parse_structs(struct_defs)
-                abi = parse_function_signature(process_multiline(i), structs=parsed)
-            else:
-                abi = parse_function_signature(process_multiline(i))
+            parsed_structs = None
+            if struct_map:
+                parsed_structs = parse_structs(
+                    itertools.chain(
+                        *(s.human_readable_abi() for s in struct_map.values())
+                    )
+                )
+            abi = parse_function_signature(process_multiline(i), structs=parsed_structs)
         else:
             abi = i
         assert abi["type"] == "function"
@@ -254,7 +287,7 @@ class ContractFunction:
         self,
         data: bytes,
         codec: ABICodec | None = None,
-        structs: list[type[ABIStruct]] | None = None,
+        structs: list[type[ABIStruct]] | dict[str, type[ABIStruct]] | None = None,
     ) -> Any:
         """Decode return data against :attr:`output_types`.
 
@@ -270,10 +303,8 @@ class ContractFunction:
         """
         codec = codec or _abi_codec
         result = codec.decode(self.output_types, data)
-        result = result[0] if len(result) == 1 else result
 
-        structs_map = {s.__name__: s for s in (structs or [])}
-        structs_map = structs_map or self.structs
+        structs_map = _normalize_structs(structs) or self.structs
         if not structs_map and self.parent:
             structs_map = self.parent.structs
         if structs_map:
@@ -281,13 +312,13 @@ class ContractFunction:
                 result, self.abi.get("outputs", []), structs_map
             )
 
-        return result
+        return result[0] if len(result) == 1 else result
 
     def decode_input(
         self,
         data: bytes,
         codec: ABICodec | None = None,
-        structs: list[type[ABIStruct]] | None = None,
+        structs: list[type[ABIStruct]] | dict[str, type[ABIStruct]] | None = None,
     ) -> Any:
         """Decode full calldata (selector + args) against the matching overload.
 
@@ -304,8 +335,7 @@ class ContractFunction:
         """
         codec = codec or _abi_codec
 
-        structs_map = {s.__name__: s for s in (structs or [])}
-        structs_map = structs_map or self.structs
+        structs_map = _normalize_structs(structs) or self.structs
         if not structs_map and self.parent:
             structs_map = self.parent.structs
 
@@ -317,12 +347,11 @@ class ContractFunction:
         for sel, abi in overloads:
             if sel == leading:
                 result = codec.decode(get_abi_input_types(abi), data[4:])
-                result = result[0] if len(result) == 1 else result
                 if structs_map:
                     result = _decode_abi_structs(
                         result, abi.get("inputs", []), structs_map
                     )
-                return result
+                return result[0] if len(result) == 1 else result
         expected = ", ".join("0x" + s.hex() for s, _ in overloads)
         raise ValueError(
             f"selector mismatch for {self.signature}: "
@@ -557,7 +586,7 @@ class Contract:
         cls,
         abi_or_signatures: ABI | list[str],
         *,
-        structs: list[type[ABIStruct]] | None = None,
+        structs: list[type[ABIStruct]] | dict[str, type[ABIStruct]] | None = None,
         **kwargs: Unpack[TxParams],
     ) -> Contract:
         """
@@ -578,16 +607,15 @@ class Contract:
             ...     'function transfer(address to, uint256 amount) external',
             ...     'function getPoint() returns (Point)',
             ... ], structs=[Point])
-            >>> result = await contract.fns.getPoint()(w3).call()
+            >>> result = await contract.fns.getPoint().call(w3)
             >>> isinstance(result, Point)  # True
         """
         assert isinstance(abi_or_signatures, list)
-        struct_map: dict[str, type[ABIStruct]] = {}
+        struct_map = _normalize_structs(structs)
         if abi_or_signatures and isinstance(abi_or_signatures[0], str):
-            extra_defs: list[str] = []
-            for s in structs or []:
-                extra_defs.extend(s.human_readable_abi())
-                struct_map[s.__name__] = s
+            extra_defs: list[str] = list(
+                itertools.chain(*(s.human_readable_abi() for s in struct_map.values()))
+            )
             abi = parse_abi(extra_defs + abi_or_signatures)
         else:
             abi = abi_or_signatures  # type: ignore

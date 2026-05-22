@@ -53,8 +53,10 @@ def _get_field_abi_type(annotation: Any, field_name: str, class_name: str) -> st
             # struct arrays.  Detect and reject early.
             if get_origin(inner) is list:
                 inner_args = get_args(inner)
-                if inner_args and isinstance(inner_args[0], type) and issubclass(
-                    inner_args[0], ABIStruct
+                if (
+                    inner_args
+                    and isinstance(inner_args[0], type)
+                    and issubclass(inner_args[0], ABIStruct)
                 ):
                     raise ValueError(
                         f"Field '{field_name}' in '{class_name}': "
@@ -102,8 +104,10 @@ def _get_inner_struct_info(
         # Annotated[list[SomeStruct], 'SomeStruct[N]'] or similar
         if get_origin(python_type) is list:
             inner_args = get_args(python_type)
-            if inner_args and isinstance(inner_args[0], type) and issubclass(
-                inner_args[0], ABIStruct
+            if (
+                inner_args
+                and isinstance(inner_args[0], type)
+                and issubclass(inner_args[0], ABIStruct)
             ):
                 inner_cls = inner_args[0]
                 if abi_override is None:
@@ -117,7 +121,7 @@ def _get_inner_struct_info(
                         f"'{expected_prefix}', got '{abi_override}'"
                     )
 
-                suffix = abi_override[len(expected_prefix):]
+                suffix = abi_override[len(expected_prefix) :]
                 if suffix == "[]":
                     return (inner_cls, suffix)
                 if (
@@ -266,8 +270,10 @@ def _collect_hra(cls: Any, seen: "dict[str, str]") -> None:
                 _collect_hra(python_type, seen)
             elif get_origin(python_type) is list:
                 inner_args = get_args(python_type)
-                if inner_args and isinstance(inner_args[0], type) and issubclass(
-                    inner_args[0], ABIStruct
+                if (
+                    inner_args
+                    and isinstance(inner_args[0], type)
+                    and issubclass(inner_args[0], ABIStruct)
                 ):
                     _collect_hra(inner_args[0], seen)
         elif isinstance(annotation, type) and issubclass(annotation, ABIStruct):
@@ -295,9 +301,7 @@ def _collect_hra(cls: Any, seen: "dict[str, str]") -> None:
                     f"in '{cls.__name__}'"
                 )
         else:
-            raise ValueError(
-                f"Cannot determine Solidity type for field '{field_name}'"
-            )
+            raise ValueError(f"Cannot determine Solidity type for field '{field_name}'")
         field_strs.append(f"{solidity_type} {field_name}")
 
     if cls.__name__ not in seen:
@@ -335,9 +339,7 @@ class ABIStructMeta(type):
             return super().__new__(mcs, name, bases, namespace)
 
         # Reject mixing non-ABIStruct bases when defining fields.
-        non_abistruct_bases = [
-            b for b in bases if not isinstance(b, ABIStructMeta)
-        ]
+        non_abistruct_bases = [b for b in bases if not isinstance(b, ABIStructMeta)]
         if non_abistruct_bases:
             raise TypeError(
                 f"ABIStruct subclass '{name}' cannot mix non-ABIStruct bases "
@@ -354,9 +356,9 @@ class ABIStructMeta(type):
                 for f in b._fields:
                     if f not in parent_annotations:
                         parent_fields.append(f)
-                        parent_annotations[f] = get_type_hints(
-                            b, include_extras=True
-                        )[f]
+                        parent_annotations[f] = get_type_hints(b, include_extras=True)[
+                            f
+                        ]
 
         # Prevent accidental redefinition of an inherited field.
         redef = set(parent_fields) & set(annotations.keys())
@@ -371,17 +373,13 @@ class ABIStructMeta(type):
         all_annotations = {**parent_annotations, **annotations}
 
         # Build a namedtuple that covers every field.
-        nt = collections.namedtuple(  # type: ignore[misc]
-            name, all_field_names
-        )
+        nt = collections.namedtuple(name, all_field_names)  # type: ignore[misc]
 
         # Build the new class hierarchy: namedtuple first, then ABIStruct bases.
         new_bases = (nt,) + tuple(abistruct_bases)
 
         new_ns = {
-            k: v
-            for k, v in namespace.items()
-            if k not in ("__dict__", "__weakref__")
+            k: v for k, v in namespace.items() if k not in ("__dict__", "__weakref__")
         }
         new_ns["__annotations__"] = all_annotations
 
@@ -473,7 +471,7 @@ class ABIStruct(metaclass=ABIStructMeta):
     """
 
     @classmethod
-    def _abi_components(cls) -> "list[dict]":
+    def _abi_components(cls) -> list[dict]:
         """Return the cached list of ABI component dicts for this struct."""
         return cls._abi_components_cache  # type: ignore[attr-defined]
 
@@ -497,7 +495,7 @@ class ABIStruct(metaclass=ABIStructMeta):
         return _build_instance(cls, decoded)  # type: ignore[return-value]
 
     @classmethod
-    def human_readable_abi(cls) -> "list[str]":
+    def human_readable_abi(cls) -> list[str]:
         """
         Return a list of Solidity-style struct definitions for this struct and
         all structs it references (directly or transitively).  Nested struct
