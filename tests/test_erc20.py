@@ -25,7 +25,7 @@ from eth_contract.utils import (
 from eth_contract.weth import WETH
 
 from .conftest import ETH_MAINNET_FORK, MULTICALL3ROUTER
-from .contracts import WETH_ADDRESS, MockERC20_ARTIFACT, MULTICALL3ROUTER_ARTIFACT
+from .contracts import MULTICALL3ROUTER_ARTIFACT, WETH_ADDRESS, MockERC20_ARTIFACT
 from .trace import trace_call
 
 
@@ -324,9 +324,7 @@ async def test_event_get_logs(w3):
     transfer_event = ERC20.events.Transfer
 
     # Fetch all Transfer events for this token since the mint
-    logs = await transfer_event.get_logs(
-        w3, address=token, from_block=from_block
-    )
+    logs = await transfer_event.get_logs(w3, address=token, from_block=from_block)
     assert len(logs) >= 2
 
     # Fetch only transfers where `from` == owner (the mint emits from == zero address,
