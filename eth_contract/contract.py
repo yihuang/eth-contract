@@ -127,7 +127,7 @@ class ContractConstructor:
 class ContractFunction:
     abis: Sequence[ABIFunction]
     parent: Contract | None = None
-    _structs: dict[str, type[ABIStruct]] | None = None
+    structs: dict[str, type[ABIStruct]] = field(default_factory=dict)
 
     @classmethod
     def from_abi(
@@ -149,7 +149,7 @@ class ContractFunction:
         else:
             abi = i
         assert abi["type"] == "function"
-        return cls([abi], _structs=struct_map or None)
+        return cls([abi], structs=struct_map)
 
     def __post_init__(self) -> None:
         self._resolve_to(self.abis[0])
@@ -234,7 +234,7 @@ class ContractFunction:
         result = codec.decode(self.output_types, data)
         result = result[0] if len(result) == 1 else result
 
-        structs = structs or self._structs
+        structs = structs or self.structs
         if not structs and self.parent:
             structs = self.parent.structs
         if structs:
@@ -257,7 +257,7 @@ class ContractFunction:
         """
         codec = codec or _abi_codec
 
-        structs = structs or self._structs
+        structs = structs or self.structs
         if not structs and self.parent:
             structs = self.parent.structs
 
