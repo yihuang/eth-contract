@@ -498,11 +498,12 @@ class Contract:
         """
         return Contract(self.abi, structs=self.structs, tx=merge(self.tx, tx))
 
-    def with_structs(self, structs: dict[str, type[ABIStruct]]) -> Contract:
+    def with_structs(self, structs: list[type[ABIStruct]]) -> Contract:
         """
         Return a new Contract with the given struct mapping merged in.
         """
-        return Contract(self.abi, structs={**self.structs, **structs}, tx=self.tx)
+        structs_map = {s.__name__: s for s in structs}
+        return Contract(self.abi, structs={**self.structs, **structs_map}, tx=self.tx)
 
     @classmethod
     def from_abi(

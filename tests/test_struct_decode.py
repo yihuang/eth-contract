@@ -118,10 +118,10 @@ class TestFromABI:
 
         raw = abi_encode(["(uint256,string)[]"], [((1, "a"), (2, "b"))])
         result = fn.decode(raw)
-        assert isinstance(result, tuple)
+        assert isinstance(result, list)
         assert len(result) == 2
         assert all(isinstance(i, Item) for i in result)
-        assert result == (Item(id=1, name="a"), Item(id=2, name="b"))
+        assert result == [Item(id=1, name="a"), Item(id=2, name="b")]
 
     def test_decode_input_with_structs(self):
         """decode_input returns ABIStruct for struct arguments."""
@@ -286,13 +286,13 @@ class TestManualDecodeKwarg:
     """Pass structs directly to decode()/decode_input() without contract-level structs."""
 
     def test_decode_with_structs_kwarg(self):
-        """decode(structs={...}) works when called manually."""
+        """decode(structs=[...]) works when called manually."""
         contract = Contract.from_abi(
             Point.human_readable_abi() + ["function getPoint() returns (Point)"],
         )
         fn = contract.fns.getPoint
         data = Point(x=10, y=20).encode()
-        result = fn.decode(data, structs={"Point": Point})
+        result = fn.decode(data, structs=[Point])
         assert isinstance(result, Point)
         assert result == Point(x=10, y=20)
 
@@ -303,7 +303,7 @@ class TestManualDecodeKwarg:
         fn = contract.fns.setPoint
         point = Point(x=7, y=8)
         calldata = fn(point).data
-        result = fn.decode_input(calldata, structs={"Point": Point})
+        result = fn.decode_input(calldata, structs=[Point])
         assert isinstance(result, Point)
         assert result == point
 
@@ -316,7 +316,7 @@ class TestManualDecodeKwarg:
             origin=Coord(lat=1, lon=2), destination=Coord(lat=3, lon=4), distance=99
         )
         data = route.encode()
-        result = fn.decode(data, structs={"Route": Route, "Coord": Coord})
+        result = fn.decode(data, structs=[Route, Coord])
         assert isinstance(result, Route)
         assert isinstance(result.origin, Coord)
         assert isinstance(result.destination, Coord)
@@ -328,7 +328,7 @@ class TestManualDecodeKwarg:
         )
         fn = contract.fns.getPoint
         data = Point(x=1, y=2).encode()
-        result = fn.decode(data, structs={})
+        result = fn.decode(data, structs=[])
         assert isinstance(result, tuple)
         assert result == (1, 2)
 
@@ -345,7 +345,7 @@ class TestManualDecodeKwarg:
         raw = abi_encode(
             ["(uint256,string)", "(uint256,uint256)"], [(1, "a"), (10, 20)]
         )
-        result = fn.decode(raw, structs={"Item": Item})
+        result = fn.decode(raw, structs=[Item])
         # Item should be converted, Point remains tuple
         assert isinstance(result, tuple)
         assert len(result) == 2
@@ -362,13 +362,13 @@ class TestManualDecodeKwarg:
 
 class TestErrors:
     def test_empty_structs_skips_conversion(self):
-        """structs={} means no conversion at all → plain tuple."""
+        """structs=[] means no conversion at all → plain tuple."""
         contract = Contract.from_abi(
             Point.human_readable_abi() + ["function getPoint() returns (Point)"],
         )
         fn = contract.fns.getPoint
         data = Point(x=1, y=2).encode()
-        result = fn.decode(data, structs={})
+        result = fn.decode(data, structs=[])
         assert isinstance(result, tuple)
         assert result == (1, 2)
 
