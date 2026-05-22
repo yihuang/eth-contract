@@ -78,8 +78,6 @@ def _split_array_suffix(type_str: str) -> tuple[str, bool]:
     >>> _split_array_suffix("tuple")
     ("tuple", False)
     """
-    if type_str.endswith("[]"):
-        return type_str[:-2], True
     bracket = type_str.rfind("[")
     if bracket >= 0:
         return type_str[:bracket], True
