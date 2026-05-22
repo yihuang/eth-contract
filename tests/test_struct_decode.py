@@ -393,6 +393,35 @@ class TestFromABI:
         assert isinstance(result, Point)
         assert result == point
 
+    def test_namespaced_struct_name(self):
+        """internalType with dotted name like "struct Domain.Test"."""
+        class NsTest(ABIStruct):
+            value: Annotated[int, "uint256"]
+
+        # Manually craft ABI with dotted internalType
+        abi = [
+            {
+                "type": "function",
+                "name": "getTest",
+                "inputs": [],
+                "outputs": [
+                    {
+                        "type": "tuple",
+                        "internalType": "struct Domain.Test",
+                        "components": [
+                            {"type": "uint256", "name": "value"}
+                        ],
+                    }
+                ],
+            }
+        ]
+        contract = Contract(abi=abi, structs={"Domain.Test": NsTest})
+        fn = contract.fns.getTest
+        data = NsTest(value=42).encode()
+        result = fn.decode(data)
+        assert isinstance(result, NsTest)
+        assert result == NsTest(value=42)
+
 
 # ---------------------------------------------------------------------------
 # Manual decode (structs= kwarg on decode / decode_input)
