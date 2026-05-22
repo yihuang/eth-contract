@@ -4,7 +4,7 @@ import itertools
 from collections import defaultdict
 from copy import copy
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Mapping, Sequence, cast
+from typing import Any, Mapping, Sequence, cast
 
 from eth_abi.codec import ABICodec
 from eth_abi.registry import registry as default_registry
