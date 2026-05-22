@@ -1,5 +1,5 @@
 import re
-from typing import cast
+from typing import Iterable, cast
 
 from eth_typing import (
     ABI,
@@ -174,7 +174,7 @@ def is_struct_signature(signature: str) -> bool:
     return STRUCT_SIGNATURE_REGEX.match(signature) is not None
 
 
-def parse_structs(signatures: list[str]) -> dict[str, list[ExtendedComponent]]:
+def parse_structs(signatures: Iterable[str]) -> dict[str, list[ExtendedComponent]]:
     """
     Parse struct definitions from a list of signatures.
     Returns a StructLookup mapping struct names to their components.
