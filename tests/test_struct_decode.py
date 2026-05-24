@@ -10,9 +10,10 @@ API::
     # CONTRACT.fns.getPoint.decode_input(data)  →  Point instance
 """
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from eth_abi import encode as abi_encode
+from eth_typing import ABI
 
 from eth_contract import ABIStruct
 from eth_contract.contract import Contract, ContractFunction
@@ -46,6 +47,10 @@ class Item(ABIStruct):
 class Values(ABIStruct):
     constructorAmount: Annotated[int, "uint256"]
     initCallAmount: Annotated[int, "uint256"]
+
+
+class NsTest(ABIStruct):
+    value: Annotated[int, "uint256"]
 
 
 # ---------------------------------------------------------------------------
@@ -400,9 +405,6 @@ class TestFromABI:
 
     def test_namespaced_struct_name(self):
         """internalType with dotted name like "struct Domain.Test"."""
-        class NsTest(ABIStruct):
-            value: Annotated[int, "uint256"]
-
         # Manually craft ABI with dotted internalType
         abi = [
             {
@@ -420,12 +422,12 @@ class TestFromABI:
                 ],
             }
         ]
-        contract = Contract(abi=abi, structs={"Domain.Test": NsTest})
+        contract = Contract(abi=cast(ABI, abi), structs={"Domain.Test": NsTest})
         fn = contract.fns.getTest
-        data = NsTest(value=42).encode()
-        result = fn.decode(data)
+        instance = NsTest(value=42)
+        result = fn.decode(instance.encode())
         assert isinstance(result, NsTest)
-        assert result == NsTest(value=42)
+        assert result == instance
 
 
 # ---------------------------------------------------------------------------
@@ -563,7 +565,7 @@ def _namespaced_fn(return_type: str) -> ContractFunction:
     fn = Contract.from_abi(
         [f"function get() returns ({return_type})"], structs=[Values]
     ).fns.get
-    fn.abi["outputs"][0]["internalType"] = f"struct CreateX.{return_type}"
+    cast(dict, fn.abi["outputs"][0])["internalType"] = f"struct CreateX.{return_type}"
     return fn
 
 

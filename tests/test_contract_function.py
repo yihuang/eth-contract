@@ -19,7 +19,7 @@ class TestContractFunctionFromABI:
         assert fn.abi["type"] == "function"
         assert fn.abi["name"] == "transfer"
 
-    def test_from_abi_with_abi_dict_creates_function(self):
+    def test_from_abi_with_abi_dict_creates_function(self) -> None:
         """Test that ABIFunction dict creates proper ContractFunction."""
         abi_dict: ABIFunction = {
             "type": "function",
