@@ -4,6 +4,7 @@ from eth_abi.decoding import AddressDecoder
 from eth_abi.registry import registry as default_registry
 from eth_typing import ABIFunction
 
+import eth_contract.contract
 from eth_contract.contract import Contract, ContractFunction
 
 
@@ -127,8 +128,6 @@ class TestContractFunctionFromABI:
         reg = default_registry.copy()
         reg.unregister_decoder("address")
         reg.register_decoder("address", AddressBytesDecoder, label="address_bytes")
-
-        import eth_contract.contract
 
         old_codec = eth_contract.contract._abi_codec
         eth_contract.contract._abi_codec = ABICodec(reg)
