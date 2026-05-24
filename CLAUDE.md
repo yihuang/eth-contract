@@ -30,9 +30,8 @@ pytest tests/test_contract.py::test_specific_function  # Run specific test
 
 ### Linting & Formatting
 ```bash
-black .           # Format code
-isort .           # Sort imports
-flake8            # Lint code
+ruff format       # Format code
+ruff check        # Lint code (includes import sorting)
 mypy .            # Type checking
 ```
 

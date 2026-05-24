@@ -479,10 +479,12 @@ class ABIStruct(metaclass=ABIStructMeta):
         """ABI-encode this struct instance to bytes."""
         cls = self.__class__
         values = _prepare_values(
-            self, cls._abi_components_cache  # type: ignore[attr-defined]
+            self,
+            cls._abi_components_cache,  # type: ignore[attr-defined]
         )
         return abi_encode(
-            [cls._abi_type_str_cache], [values]  # type: ignore[attr-defined]
+            [cls._abi_type_str_cache],
+            [values],  # type: ignore[attr-defined]
         )
 
     @classmethod
