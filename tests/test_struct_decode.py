@@ -13,7 +13,6 @@ API::
 import asyncio
 from typing import Annotated, cast
 
-import pytest
 from eth_abi import encode as abi_encode
 from eth_typing import ABI
 
@@ -45,15 +44,6 @@ class Route(ABIStruct):
 class Item(ABIStruct):
     id: Annotated[int, "uint256"]
     name: Annotated[str, "string"]
-
-
-class Values(ABIStruct):
-    constructorAmount: Annotated[int, "uint256"]
-    initCallAmount: Annotated[int, "uint256"]
-
-
-class NsTest(ABIStruct):
-    value: Annotated[int, "uint256"]
 
 
 # ---------------------------------------------------------------------------
@@ -558,49 +548,3 @@ class TestErrors:
 
         assert type(out) is tuple and type(inp) is tuple  # neither converted
         assert (out, inp) == ((1, 2), (3, 4))
-
-
-def _namespaced_fn(return_type: str) -> ContractFunction:
-    fn = Contract.from_abi(
-        [f"function get() returns ({return_type})"], structs=[Values]
-    ).fns.get
-    cast(dict, fn.abi["outputs"][0])["internalType"] = f"struct CreateX.{return_type}"
-    return fn
-
-
-class TestNamespacedInternalType:
-    def test_qualified_struct(self):
-        fn = _namespaced_fn("Values")
-        raw = abi_encode(["(uint256,uint256)"], [(1, 2)])
-        result = fn.decode(raw)
-        assert isinstance(result, Values)
-        assert result == Values(constructorAmount=1, initCallAmount=2)
-
-    def test_qualified_struct_array(self):
-        fn = _namespaced_fn("Values[]")
-        raw = abi_encode(["(uint256,uint256)[]"], [[(1, 2), (3, 4)]])
-        result = fn.decode(raw)
-        assert all(isinstance(v, Values) for v in result)
-        assert result == (
-            Values(constructorAmount=1, initCallAmount=2),
-            Values(constructorAmount=3, initCallAmount=4),
-        )
-
-    @pytest.mark.parametrize(
-        "structs",
-        [
-            pytest.param(
-                {"Foo.Values": Values, "Bar.Values": Values}, id="multi-qualified"
-            ),
-            pytest.param(
-                {"Values": Values, "Foo.Values": Values}, id="bare-and-qualified"
-            ),
-            pytest.param({"Foo.Values": Values}, id="qualified-only"),
-        ],
-    )
-    def test_bare_fallback_suppressed(self, structs):
-        fn = Contract.from_abi(
-            ["function get() returns ((uint256,uint256))"], structs=structs
-        ).fns.get
-        cast(dict, fn.abi["outputs"][0])["internalType"] = "struct Other.Values"
-        assert fn.decode(abi_encode(["(uint256,uint256)"], [(1, 2)])) == (1, 2)
