@@ -11,7 +11,7 @@ API::
 """
 
 import asyncio
-from typing import Annotated, cast
+from typing import Annotated
 
 from eth_abi import encode as abi_encode
 from eth_typing import ABI
@@ -397,13 +397,13 @@ class TestFromABI:
             value: Annotated[int, "uint256"]
 
         # Manually craft ABI with dotted internalType
-        abi = [
+        abi: ABI = [
             {
                 "type": "function",
                 "name": "getTest",
                 "inputs": [],
                 "outputs": [
-                    {
+                    { # type: ignore
                         "type": "tuple",
                         "internalType": "struct Domain.Test",
                         "components": [{"type": "uint256", "name": "value"}],
@@ -411,7 +411,7 @@ class TestFromABI:
                 ],
             }
         ]
-        contract = Contract(abi=cast(ABI, abi), structs={"Domain.Test": NsTest})
+        contract = Contract(abi=abi, structs={"Domain.Test": NsTest})
         fn = contract.fns.getTest
         instance = NsTest(value=42)
         result = fn.decode(instance.encode())
