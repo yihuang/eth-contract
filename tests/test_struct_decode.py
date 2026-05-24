@@ -12,6 +12,7 @@ API::
 
 from typing import Annotated, cast
 
+import pytest
 from eth_abi import encode as abi_encode
 from eth_typing import ABI
 
@@ -415,9 +416,7 @@ class TestFromABI:
                     {
                         "type": "tuple",
                         "internalType": "struct Domain.Test",
-                        "components": [
-                            {"type": "uint256", "name": "value"}
-                        ],
+                        "components": [{"type": "uint256", "name": "value"}],
                     }
                 ],
             }
@@ -570,7 +569,6 @@ def _namespaced_fn(return_type: str) -> ContractFunction:
 
 
 class TestNamespacedInternalType:
-
     def test_qualified_struct(self):
         fn = _namespaced_fn("Values")
         raw = abi_encode(["(uint256,uint256)"], [(1, 2)])
@@ -587,3 +585,22 @@ class TestNamespacedInternalType:
             Values(constructorAmount=1, initCallAmount=2),
             Values(constructorAmount=3, initCallAmount=4),
         )
+
+    @pytest.mark.parametrize(
+        "structs",
+        [
+            pytest.param(
+                {"Foo.Values": Values, "Bar.Values": Values}, id="multi-qualified"
+            ),
+            pytest.param(
+                {"Values": Values, "Foo.Values": Values}, id="bare-and-qualified"
+            ),
+            pytest.param({"Foo.Values": Values}, id="qualified-only"),
+        ],
+    )
+    def test_bare_fallback_suppressed(self, structs):
+        fn = Contract.from_abi(
+            ["function get() returns ((uint256,uint256))"], structs=structs
+        ).fns.get
+        cast(dict, fn.abi["outputs"][0])["internalType"] = "struct Other.Values"
+        assert fn.decode(abi_encode(["(uint256,uint256)"], [(1, 2)])) == (1, 2)

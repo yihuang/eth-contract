@@ -99,6 +99,15 @@ def _decode_abi_structs(
     Structs referenced in the ABI but missing from *structs* are
     silently left as plain tuples or lists.
     """
+    # A bare key ("Values") aliases qualified internalTypes ("struct Lib.Values")
+    # only when no qualified key shares that suffix — prevents mixed
+    # registrations from mis-decoding an unrelated `Other.Values`.
+    qualified_bares = {k.rsplit(".", 1)[-1] for k in structs if "." in k}
+    bare_aliases = {
+        k: cls
+        for k, cls in structs.items()
+        if "." not in k and k not in qualified_bares
+    }
 
     def _process(val: Any, abi_type: ABIComponent) -> Any:
         # 1. Array: strip one level, recurse on each element
@@ -115,9 +124,7 @@ def _decode_abi_structs(
         internal_type: str | None = abi_type.get("internalType")  # type: ignore
         if internal_type is not None and internal_type.startswith("struct "):
             raw_name = internal_type[len("struct ") :]
-            # solc qualifies library/contract structs ("struct CreateX.Values");
-            # try the full name, then fall back to the bare struct name.
-            cls = structs.get(raw_name) or structs.get(raw_name.rsplit(".", 1)[-1])
+            cls = structs.get(raw_name) or bare_aliases.get(raw_name.rsplit(".", 1)[-1])
             if cls is not None:
                 return _build_instance(cls, val)
             return val
