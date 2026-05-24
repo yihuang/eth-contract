@@ -403,7 +403,7 @@ class TestFromABI:
                 "name": "getTest",
                 "inputs": [],
                 "outputs": [
-                    { # type: ignore
+                    {  # type: ignore
                         "type": "tuple",
                         "internalType": "struct Domain.Test",
                         "components": [{"type": "uint256", "name": "value"}],
