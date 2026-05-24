@@ -253,7 +253,7 @@ async def deploy_presigned_tx(
         # fund the deployer if needed
         if funder is None:
             raise ValueError(
-                f"funder not provided, please fund {Decimal(fee)/10**18} "
+                f"funder not provided, please fund {Decimal(fee) / 10**18} "
                 f"to the deployer {deployer} manually"
             )
         await transfer(w3, ZERO_ADDRESS, funder, deployer, fee, **extra)

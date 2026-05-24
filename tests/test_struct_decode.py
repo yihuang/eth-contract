@@ -10,12 +10,14 @@ API::
     # CONTRACT.fns.getPoint.decode_input(data)  →  Point instance
 """
 
+import asyncio
 from typing import Annotated, cast
 
 import pytest
 from eth_abi import encode as abi_encode
 from eth_typing import ABI
 
+import eth_contract.contract
 from eth_contract import ABIStruct
 from eth_contract.contract import Contract, ContractFunction
 
@@ -142,7 +144,6 @@ class TestFromABI:
             structs=[Point],
         )
         fn = contract.fns.getMatrix
-        from eth_abi import encode as abi_encode
 
         raw = abi_encode(
             ["(uint256,uint256)[][]"],
@@ -175,7 +176,6 @@ class TestFromABI:
             structs=[Point],
         )
         fn = contract.fns.getGrid
-        from eth_abi import encode as abi_encode
 
         raw = abi_encode(
             ["(uint256,uint256)[2][3]"],
@@ -319,9 +319,7 @@ class TestFromABI:
         fn = contract.fns.getPoint
         data = Point(x=5, y=6).encode()
 
-        import eth_contract.contract as cmod
-
-        old_codec = cmod._abi_codec
+        old_codec = eth_contract.contract._abi_codec
 
         class FakeWeb3:
             class eth:
@@ -330,8 +328,6 @@ class TestFromABI:
                     return data
 
             codec = old_codec
-
-        import asyncio
 
         result = asyncio.run(fn().call(FakeWeb3()))
         assert isinstance(result, Point)
@@ -406,6 +402,10 @@ class TestFromABI:
 
     def test_namespaced_struct_name(self):
         """internalType with dotted name like "struct Domain.Test"."""
+
+        class NsTest(ABIStruct):
+            value: Annotated[int, "uint256"]
+
         # Manually craft ABI with dotted internalType
         abi = [
             {

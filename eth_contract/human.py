@@ -406,7 +406,7 @@ def parse_abi_parameter(
 
     # Add internalType
     if groups["type"] in structs:
-        result["internalType"] = f'struct {groups["type"]}{array}'
+        result["internalType"] = f"struct {groups['type']}{array}"
 
     # Validate modifier
     if modifier and modifiers and modifier not in modifiers:

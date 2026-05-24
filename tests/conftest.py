@@ -24,9 +24,9 @@ from eth_contract.entrypoint import (
     ENTRYPOINT08_ARTIFACT,
     ENTRYPOINT08_SALT,
 )
-from eth_contract.weth import WETH9_ARTIFACT
 from eth_contract.multicall3 import MULTICALL3_ADDRESS
 from eth_contract.utils import get_initcode
+from eth_contract.weth import WETH9_ARTIFACT
 
 from .contracts import (
     MULTICALL3ROUTER_ARTIFACT,
