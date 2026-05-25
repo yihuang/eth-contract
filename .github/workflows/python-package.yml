@@ -37,3 +37,30 @@ jobs:
       run: uv run mypy .
     - run: pytest -s -vvv
       if: success() || failure()
+
+  lint-fix:
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .envrc.example .envrc
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - name: Install direnv with Nix
+        uses: aldoborrero/direnv-nix-action@v2
+        with:
+          use_nix_profile: true
+          nix_channel: nixpkgs
+      - run: uv sync
+      - name: Format and lint (auto-fix)
+        run: |
+          ruff format .
+          ruff check --fix .
+
+      - name: Commit and push fixes
+        uses: stefanzweifel/git-auto-commit-action@v7.1.0
+        with:
+          commit_message: "style: auto-fix ruff format and lint"
+          branch: ${{ github.head_ref }}
+

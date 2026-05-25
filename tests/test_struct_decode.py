@@ -11,9 +11,10 @@ API::
 """
 
 import asyncio
-from typing import Annotated
+from typing import Annotated, cast
 
 from eth_abi import encode as abi_encode
+from eth_typing import ABI
 
 import eth_contract.contract
 from eth_contract import ABIStruct
@@ -396,26 +397,29 @@ class TestFromABI:
             value: Annotated[int, "uint256"]
 
         # Manually craft ABI with dotted internalType
-        abi = [
-            {
-                "type": "function",
-                "name": "getTest",
-                "inputs": [],
-                "outputs": [
-                    {
-                        "type": "tuple",
-                        "internalType": "struct Domain.Test",
-                        "components": [{"type": "uint256", "name": "value"}],
-                    }
-                ],
-            }
-        ]
+        abi = cast(
+            ABI,
+            [
+                {
+                    "type": "function",
+                    "name": "getTest",
+                    "inputs": [],
+                    "outputs": [
+                        {
+                            "type": "tuple",
+                            "internalType": "struct Domain.Test",
+                            "components": [{"type": "uint256", "name": "value"}],
+                        }
+                    ],
+                }
+            ],
+        )
         contract = Contract(abi=abi, structs={"Domain.Test": NsTest})
         fn = contract.fns.getTest
-        data = NsTest(value=42).encode()
-        result = fn.decode(data)
+        instance = NsTest(value=42)
+        result = fn.decode(instance.encode())
         assert isinstance(result, NsTest)
-        assert result == NsTest(value=42)
+        assert result == instance
 
 
 # ---------------------------------------------------------------------------
@@ -535,3 +539,15 @@ class TestErrors:
         calldata = fn(point).data
         result = fn.decode_input(calldata)  # uses parent's structs
         assert isinstance(result, Point)
+
+    def test_empty_structs_overrides_contract_structs(self):
+        contract = Contract.from_abi(
+            ["function getPoint() returns (Point)", "function setPoint(Point)"],
+            structs=[Point],
+        )
+        set_point = contract.fns.setPoint
+        out = contract.fns.getPoint.decode(Point(x=1, y=2).encode(), structs=[])
+        inp = set_point.decode_input(set_point(Point(x=3, y=4)).data, structs=[])
+
+        assert type(out) is tuple and type(inp) is tuple  # neither converted
+        assert (out, inp) == ((1, 2), (3, 4))
