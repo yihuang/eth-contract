@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-06-03
+
+### Added
+
+- `encode_abi` and `process_receipt` methods on `ContractFunction` for standalone ABI encoding
+  and receipt log decoding (#42).
+- `decode_calldata` for function input types, allowing calldata to be decoded back into
+  structured Python types (#44).
+- Decoded return values now produce `ABIStruct` objects (not plain tuples) when the ABI has
+  `internalType: "struct Xxx"` metadata (#46).
+
+### Changed
+
+- Switched from black/isort to ruff for formatting, linting, and import sorting (#49).
+
+### Fixed
+
+- Monkeypatch codec support for decoding `address` as `bytes` (#41).
+- Empty structs (`tuple()`) in overrides are now handled correctly (#48).
+- Flaky balance check removed from ERC-20 slot detection test (#43).
+
 ## [0.4.0] - 2026-04-10
 
 ### Added
