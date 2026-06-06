@@ -171,10 +171,10 @@ async def test_weth(w3):
     before = await balance_of(w3, ZERO_ADDRESS, acct)
     receipt = await weth.fns.deposit().transact(w3, acct, value=1000)
     fee = receipt["effectiveGasPrice"] * receipt["gasUsed"]
-    await balance_of(w3, WETH_ADDRESS, acct) == 1000
+    assert await balance_of(w3, WETH_ADDRESS, acct) == 1000
     receipt = await weth.fns.withdraw(1000).transact(w3, acct)
     fee += receipt["effectiveGasPrice"] * receipt["gasUsed"]
-    await balance_of(w3, WETH_ADDRESS, acct) == 0
+    assert await balance_of(w3, WETH_ADDRESS, acct) == 0
     assert await balance_of(w3, ZERO_ADDRESS, acct) == before - fee
 
 
