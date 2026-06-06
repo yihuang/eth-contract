@@ -112,7 +112,9 @@ async def ensure_deployed_by_create3(
 ) -> ChecksumAddress:
     if isinstance(salt, int):
         salt = salt.to_bytes(32, "big")
-    addr = create3_address(salt)
+    deployer = account.address if isinstance(account, BaseAccount) else account
+    chainid = await w3.eth.chain_id if salt[20] == 0x01 else None
+    addr = create3_address(salt, deployer=deployer, chainid=chainid)
     if await w3.eth.get_code(addr):
         print(f"Contract already deployed at {addr}")
         return addr
