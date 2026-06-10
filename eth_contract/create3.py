@@ -54,6 +54,16 @@ def guard_salt(
     return keccak(prefix + salt)
 
 
+async def _resolve_create3_params(
+    w3: AsyncWeb3,
+    account: BaseAccount | ChecksumAddress,
+    salt: bytes,
+) -> tuple[ChecksumAddress, int | None]:
+    deployer = account.address if isinstance(account, BaseAccount) else account
+    chainid = await w3.eth.chain_id if salt[20] == 0x01 else None
+    return deployer, chainid
+
+
 def create3_address(
     salt: bytes | int = 0,
     factory: ChecksumAddress = CREATEX_FACTORY,
@@ -92,9 +102,7 @@ async def create3_deploy(
     if isinstance(salt, int):
         salt = salt.to_bytes(32, "big")
 
-    deployer = acct.address if isinstance(acct, BaseAccount) else acct
-    # chainid is only consulted for cross-chain-protected salts (flag 0x01)
-    chainid = await w3.eth.chain_id if salt[20] == 0x01 else None
+    deployer, chainid = await _resolve_create3_params(w3, acct, salt)
 
     tx = assoc(tx, "to", factory)
     await CREATEX.fns.deployCreate3(salt, initcode).transact(w3, acct, **tx)
@@ -181,8 +189,7 @@ if __name__ == "__main__":
         initcode = get_initcode(artifact, *map(parse_cli_arg, args.ctor_args))
         factory = to_checksum_address(args.factory)
         salt = args.salt.to_bytes(32, "big")
-        deployer = acct.address if isinstance(acct, BaseAccount) else acct
-        chainid = await w3.eth.chain_id if salt[20] == 0x01 else None
+        deployer, chainid = await _resolve_create3_params(w3, acct, salt)
         addr = create3_address(salt, factory, deployer=deployer, chainid=chainid)
         if await w3.eth.get_code(addr):
             print(f"Contract address already exists {addr}")

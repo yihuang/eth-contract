@@ -10,7 +10,7 @@ from web3 import AsyncWeb3
 from web3.types import TxParams, Wei
 
 from .create2 import CREATE2_FACTORY, create2_address, create2_deploy
-from .create3 import CREATEX_FACTORY, create3_address, create3_deploy
+from .create3 import CREATEX_FACTORY, create3_address, create3_deploy, _resolve_create3_params
 from .history_storage import HISTORY_STORAGE_ADDRESS
 from .multicall3 import MULTICALL3_ADDRESS
 from .utils import deploy_presigned_tx
@@ -112,8 +112,7 @@ async def ensure_deployed_by_create3(
 ) -> ChecksumAddress:
     if isinstance(salt, int):
         salt = salt.to_bytes(32, "big")
-    deployer = account.address if isinstance(account, BaseAccount) else account
-    chainid = await w3.eth.chain_id if salt[20] == 0x01 else None
+    deployer, chainid = await _resolve_create3_params(w3, account, salt)
     addr = create3_address(salt, deployer=deployer, chainid=chainid)
     if await w3.eth.get_code(addr):
         print(f"Contract already deployed at {addr}")
