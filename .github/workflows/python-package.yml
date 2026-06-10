@@ -45,6 +45,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          token: ${{ secrets.PAT }}
+          fetch-depth: 0
       - run: cp .envrc.example .envrc
       - uses: DeterminateSystems/determinate-nix-action@v3
       - name: Install direnv with Nix
@@ -63,4 +67,5 @@ jobs:
         with:
           commit_message: "style: auto-fix ruff format and lint"
           branch: ${{ github.head_ref }}
+          token: ${{ secrets.PAT }}
 
