@@ -2,9 +2,10 @@ import asyncio
 
 import pyrevm
 import pytest
-from eth_utils import keccak, to_checksum_address, to_hex
+from eth_utils import keccak, to_bytes, to_checksum_address, to_hex
 
 from eth_contract.contract import Contract
+from eth_contract.create3 import guard_salt
 from eth_contract.deploy_utils import (
     ensure_deployed_by_create2,
     ensure_deployed_by_create3,
@@ -104,6 +105,65 @@ async def test_create3_deploy(w3):
     assert await ERC20.fns.balanceOf(owner).call(w3, to=token) == balance + amt
 
 
+def _salt(prefix: bytes, flag: int) -> bytes:
+    "32-byte CreateX salt: 20-byte sender field || 1-byte flag || 11-byte pad"
+    return prefix + bytes([flag]) + b"\xab" * 11
+
+
+def test_guard_salt_all_branches():
+    """Every CreateX ``_guard`` branch, see createx/src/CreateX.sol#L922."""
+    deployer = to_checksum_address("0x" + "11" * 20)
+    sender, zero, rand = to_bytes(hexstr=deployer), bytes(20), b"\x22" * 20
+    chainid = 1337
+    sender32, chainid32 = sender.rjust(32, b"\x00"), chainid.to_bytes(32, "big")
+
+    def guarded(prefix: bytes, flag: int, **kw) -> bytes:
+        kw.setdefault("deployer", deployer)
+        kw.setdefault("chainid", chainid)
+        return guard_salt(_salt(prefix, flag), **kw)
+
+    # permissioned (first 20 bytes == sender): folds in sender (+ chainid if 0x01)
+    assert guarded(sender, 0x01) == keccak(sender32 + chainid32 + _salt(sender, 0x01))
+    assert guarded(sender, 0x00) == keccak(sender32 + _salt(sender, 0x00))
+    # zero sender: cross-chain protection folds in chainid, otherwise unguarded
+    assert guarded(zero, 0x01) == keccak(chainid32 + _salt(zero, 0x01))
+    assert guarded(zero, 0x00) == keccak(_salt(zero, 0x00))
+    # random sender: always unguarded, whatever the flag
+    for flag in (0x00, 0x01, 0x02):
+        assert guarded(rand, flag) == keccak(_salt(rand, flag))
+    # flag > 0x01 for permissioned / zero sender reverts (developer explicitness)
+    for prefix in (sender, zero):
+        with pytest.raises(ValueError):
+            guarded(prefix, 0x02)
+    # missing context must be a hard error, never a silent wrong address
+    with pytest.raises(ValueError):
+        guarded(zero, 0x01, chainid=None)  # cross-chain salt needs chainid
+    # unknown deployer can't detect a permissioned salt; documented fallback
+    assert guarded(sender, 0x00, deployer=None) == keccak(_salt(sender, 0x00))
+
+
+@pytest.mark.parametrize(
+    "make_salt",
+    [
+        # permissioned: first 20 bytes == sender -> keccak(sender32 ++ salt)
+        pytest.param(
+            lambda owner: to_bytes(hexstr=owner) + bytes(12), id="permissioned"
+        ),
+        # cross-chain: zero sender + 0x01 flag -> keccak(chainid32 ++ salt)
+        pytest.param(
+            lambda owner: bytes(20) + b"\x01" + b"\x11" * 11, id="cross_chain"
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_create3_deploy_guarded_salt(w3, make_salt):
+    owner = (await w3.eth.accounts)[0]
+    salt = make_salt(owner)
+    initcode = get_initcode(MockERC20_ARTIFACT, "T3G", "T3G", 18)
+    addr = await ensure_deployed_by_create3(w3, owner, initcode, salt=salt)
+    assert await w3.eth.get_code(addr), f"no code at predicted address {addr}"
+
+
 @pytest.mark.asyncio
 async def test_weth(w3):
     weth = WETH(to=WETH_ADDRESS)
@@ -111,10 +171,10 @@ async def test_weth(w3):
     before = await balance_of(w3, ZERO_ADDRESS, acct)
     receipt = await weth.fns.deposit().transact(w3, acct, value=1000)
     fee = receipt["effectiveGasPrice"] * receipt["gasUsed"]
-    await balance_of(w3, WETH_ADDRESS, acct) == 1000
+    assert await balance_of(w3, WETH_ADDRESS, acct) == 1000
     receipt = await weth.fns.withdraw(1000).transact(w3, acct)
     fee += receipt["effectiveGasPrice"] * receipt["gasUsed"]
-    await balance_of(w3, WETH_ADDRESS, acct) == 0
+    assert await balance_of(w3, WETH_ADDRESS, acct) == 0
     assert await balance_of(w3, ZERO_ADDRESS, acct) == before - fee
 
 
